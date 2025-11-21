@@ -10,18 +10,24 @@ pub struct BitbucketClient {
 }
 
 impl BitbucketClient {
-    pub fn new(profile: Option<&ProfileConfig>, _token: Option<String>) -> Result<Self> {
+    pub fn new(
+        profile: Option<&ProfileConfig>,
+        auth_override: Option<(String, String)>,
+    ) -> Result<Self> {
         let base_url = profile
             .and_then(|p| p.api_url.clone())
             .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
 
-        let mut auth_header = None;
+        let mut auth_header = auth_override;
 
-        if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
-            if let Ok(entry) = keyring::Entry::new(crate::constants::KEYRING_SERVICE_NAME, username)
-            {
-                if let Ok(password) = entry.get_password() {
-                    auth_header = Some((username.clone(), password));
+        if auth_header.is_none() {
+            if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
+                if let Ok(entry) =
+                    keyring::Entry::new(crate::constants::KEYRING_SERVICE_NAME, username)
+                {
+                    if let Ok(password) = entry.get_password() {
+                        auth_header = Some((username.clone(), password));
+                    }
                 }
             }
         }
@@ -151,5 +157,9 @@ impl BitbucketClient {
             .find(|pr| pr.source.branch.name == branch_name);
 
         Ok(pr)
+    }
+
+    pub async fn get_current_user(&self) -> Result<crate::api::models::User> {
+        self.get("/user").await
     }
 }

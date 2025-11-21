@@ -68,9 +68,7 @@ async fn main() {
     let profile = config.profiles.as_ref().and_then(|p| p.get(&profile_name));
 
     // Initialize API client
-    // TODO: Get token from keyring
-    let token = None;
-    let client = match api::client::BitbucketClient::new(profile, token) {
+    let client = match api::client::BitbucketClient::new(profile, None) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error initializing client: {}", e);
