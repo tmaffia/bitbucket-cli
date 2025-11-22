@@ -50,7 +50,7 @@ async fn main() {
         Ok(c) => c,
         Err(e) => {
             if !cli.quiet {
-                eprintln!("Warning: Failed to load config: {}", e);
+                utils::display::warning(&format!("Failed to load config: {}", e));
             }
             // Return empty config or default
             config::manager::AppConfig {
@@ -71,7 +71,7 @@ async fn main() {
     let client = match api::client::BitbucketClient::new(profile, None) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error initializing client: {}", e);
+            utils::display::error(&format!("Error initializing client: {}", e));
             process::exit(1);
         }
     };
@@ -83,7 +83,7 @@ async fn main() {
     };
 
     if let Err(e) = result {
-        eprintln!("Error: {}", e);
+        utils::display::error(&format!("{:#}", e));
         process::exit(1);
     }
 }

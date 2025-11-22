@@ -2,6 +2,8 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::io::{self, Write};
 
+use crate::utils::display;
+
 #[derive(Args)]
 pub struct ConfigArgs {
     #[command(subcommand)]
@@ -23,29 +25,37 @@ pub enum ConfigCommands {
 pub async fn handle(args: ConfigArgs) -> Result<()> {
     match args.command {
         ConfigCommands::Init => {
-            println!("Initializing config...");
+            display::info("Initializing config...");
             // Interactive setup
             let mut input = String::new();
 
-            print!("Default Workspace: ");
+            print!("Workspace (e.g., myworkspace): ");
             io::stdout().flush()?;
-            input.clear();
             io::stdin().read_line(&mut input)?;
-            let workspace = input.trim();
-            if !workspace.is_empty() {
-                crate::config::manager::set_config_value("profile.default.workspace", workspace)?;
+            let workspace = input.trim().to_string();
+
+            input.clear();
+            print!("Default repository (optional): ");
+            io::stdout().flush()?;
+            io::stdin().read_line(&mut input)?;
+            let repo = input.trim().to_string();
+
+            crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
+            if !repo.is_empty() {
+                crate::config::manager::set_config_value("profile.default.repository", &repo)?;
             }
 
-            print!("Default User: ");
-            io::stdout().flush()?;
             input.clear();
+            print!("Default user email (optional): ");
+            io::stdout().flush()?;
             io::stdin().read_line(&mut input)?;
-            let user = input.trim();
+            let user = input.trim().to_string();
+
             if !user.is_empty() {
-                crate::config::manager::set_config_value("profile.default.user", user)?;
+                crate::config::manager::set_config_value("profile.default.user", &user)?;
             }
 
-            println!("Configuration initialized.");
+            display::success("Configuration initialized");
         }
         ConfigCommands::List => {
             let config = crate::config::manager::AppConfig::load()?;
@@ -53,25 +63,22 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
         }
         ConfigCommands::Set { key, value } => {
             crate::config::manager::set_config_value(&key, &value)?;
-            println!("Set {} = {}", key, value);
+            display::success(&format!("Set {} = {}", key, value));
         }
         ConfigCommands::Get { key } => {
             let config = crate::config::manager::AppConfig::load()?;
 
-            // If no key provided, show entire config
-            if key.is_none() {
+            // If no key provided, show full config
+            if key.is_none() || key.as_ref().map_or(true, |s| s.is_empty()) {
                 println!("{:#?}", config);
                 return Ok(());
             }
 
             let key = key.unwrap();
 
-            // Match on simple, intuitive keys. Most keys default to the active profile.
+            // Match on the key to access the appropriate field
             let value = match key.as_str() {
-                // Top-level config
                 "default_profile" => config.default_profile.as_ref().map(|s| s.as_str()),
-
-                // Active profile fields (simple keys)
                 "workspace" => config.get_active_profile().map(|p| p.workspace.as_str()),
                 "user" => config
                     .get_active_profile()
@@ -87,9 +94,9 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
                     .and_then(|p| p.output_format.as_ref().map(|s| s.as_str())),
 
                 _ => {
-                    println!("Unknown key: '{}'", key);
-                    println!(
-                        "Valid keys: default_profile, workspace, user, repository, api_url, output_format"
+                    display::error(&format!("Unknown key: '{}'", key));
+                    display::info(
+                        "Valid keys: default_profile, workspace, user, repository, api_url, output_format",
                     );
                     return Ok(());
                 }
@@ -97,7 +104,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
 
             match value {
                 Some(v) => println!("{}", v),
-                None => println!("Key not found or not set."),
+                None => display::warning("Key not found or not set"),
             }
         }
     }

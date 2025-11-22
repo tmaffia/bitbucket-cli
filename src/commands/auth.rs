@@ -1,7 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
 use clap::{Args, Subcommand};
-use keyring::Entry;
 use std::io::{self, Write};
+
+use crate::api::models::User;
+use crate::config::manager::ProfileConfig;
+use crate::utils::display;
 
 #[derive(Args)]
 pub struct AuthArgs {
@@ -12,132 +15,144 @@ pub struct AuthArgs {
 #[derive(Subcommand)]
 pub enum AuthCommands {
     /// Login to Bitbucket
-    Login {
-        /// Workspace/Username
-        #[arg(short, long)]
-        username: Option<String>,
-    },
+    Login,
     /// Logout
     Logout,
-    /// Check auth status
+    /// Check authentication status
     Status,
+}
+
+/// Check if user is authenticated by verifying credentials and API access
+async fn get_authenticated_user(profile: Option<&ProfileConfig>) -> Result<User> {
+    let username = profile
+        .and_then(|p| p.user.as_ref())
+        .ok_or_else(|| anyhow!("No user configured in active profile"))?;
+
+    // Verify password exists in keyring
+    let _password = crate::utils::auth::get_credentials(username)?;
+
+    // Verify credentials against API
+    let client = crate::api::client::BitbucketClient::new(profile, None)?;
+    client
+        .get_current_user()
+        .await
+        .context("API authentication failed")
+}
+
+/// Attempt to log in with provided credentials
+async fn check_login(
+    profile: Option<&ProfileConfig>,
+    username: &str,
+    password: &str,
+) -> Result<User> {
+    // Verify credentials work with API first
+    let client = crate::api::client::BitbucketClient::new(
+        profile,
+        Some((username.to_string(), password.to_string())),
+    )?;
+    let user = client
+        .get_current_user()
+        .await
+        .context("Authentication failed - check username and password")?;
+
+    // Save to keyring after verification
+    crate::utils::auth::save_credentials(username, password)?;
+
+    Ok(user)
+}
+
+/// Delete credentials from keyring
+fn check_logout(username: &str) -> Result<()> {
+    crate::utils::auth::delete_credentials(username)?;
+
+    Ok(())
 }
 
 pub async fn handle(args: AuthArgs) -> Result<()> {
     match args.command {
-        AuthCommands::Login { username } => {
-            let username = match username {
-                Some(u) => u,
-                None => {
-                    print!("Bitbucket Username: ");
-                    io::stdout().flush()?;
-                    let mut input = String::new();
-                    io::stdin().read_line(&mut input)?;
-                    input.trim().to_string()
-                }
-            };
+        AuthCommands::Login => {
+            print!("Username: ");
+            io::stdout().flush()?;
+            let mut username = String::new();
+            io::stdin().read_line(&mut username)?;
+            let username = username.trim();
 
-            let password = rpassword::prompt_password("App Password: ")?;
+            if username.is_empty() {
+                display::error("Username cannot be empty");
+                return Ok(());
+            }
 
-            // Verify credentials
-            println!("Verifying credentials...");
-            let client = crate::api::client::BitbucketClient::new(
-                None,
-                Some((username.clone(), password.clone())),
-            )?;
+            let password = rpassword::prompt_password("Password: ")?;
 
-            match client.get_current_user().await {
+            if password.is_empty() {
+                display::error("Password cannot be empty");
+                return Ok(());
+            }
+
+            display::info("Verifying credentials...");
+
+            let config = crate::config::manager::AppConfig::load().ok();
+            let profile = config.as_ref().and_then(|c| c.get_active_profile());
+
+            match check_login(profile, username, &password).await {
                 Ok(user) => {
-                    println!(
-                        "Successfully authenticated as: {} ({})",
+                    display::success(&format!(
+                        "Authenticated as {} ({})",
                         user.display_name, user.uuid
-                    );
-
-                    let entry = Entry::new(crate::constants::KEYRING_SERVICE_NAME, &username)?;
-                    entry.set_password(&password)?;
-
-                    println!("Credentials saved to keyring for user: '{}'", username);
-
-                    // Verify write
-                    match entry.get_password() {
-                        Ok(_) => {
-                            println!("Verification: Password successfully retrieved from keyring.")
-                        }
-                        Err(e) => println!(
-                            "Verification: Failed to retrieve password from keyring immediately: {}",
-                            e
-                        ),
-                    }
-
-                    // Update config.toml
-                    crate::config::manager::update_global_user(&username)?;
+                    ));
+                    display::info(&format!("Credentials saved for user '{}'", username));
                 }
                 Err(e) => {
-                    return Err(anyhow::anyhow!("Authentication failed: {}", e));
+                    display::error(&format!("Login failed: {:#}", e));
                 }
             }
         }
         AuthCommands::Logout => {
-            // Try to get username from config if not provided (though logout doesn't take args currently)
-            // The current implementation asks for username.
-            // Let's try to get the current user from config first as default.
-
             let config = crate::config::manager::AppConfig::load().ok();
-            let _default_user = config.as_ref().and_then(|c| c.get_default_user());
+            let default_user = config.as_ref().and_then(|c| c.get_default_user());
 
-            // Actually, let's look at the struct:
-            // AuthCommands::Logout takes no args.
+            let username = if let Some(user) = default_user.as_ref() {
+                display::info(&format!("Logging out user: {}", user));
+                user.clone()
+            } else {
+                print!("Username to logout: ");
+                io::stdout().flush()?;
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+                let user = input.trim();
 
-            print!("Username to logout: ");
-            io::stdout().flush()?;
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-            let user = input.trim();
+                if user.is_empty() {
+                    display::error("No username provided");
+                    return Ok(());
+                }
+                user.to_string()
+            };
 
-            if user.is_empty() {
-                println!("No username provided.");
-                return Ok(());
-            }
-
-            let entry = Entry::new(crate::constants::KEYRING_SERVICE_NAME, user)?;
-            match entry.delete_credential() {
-                Ok(_) => println!("Logged out {}", user),
-                Err(e) => println!("Error logging out: {}", e),
+            match check_logout(&username) {
+                Ok(_) => display::success(&format!("Logged out {}", username)),
+                Err(e) => display::error(&format!("Logout failed: {:#}", e)),
             }
         }
         AuthCommands::Status => {
-            println!("Checking status...");
+            display::info("Checking authentication status...");
+
             let config = crate::config::manager::AppConfig::load()?;
             let profile = config.get_active_profile();
 
-            if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
-                println!("Configured user: '{}'", username);
-                // Check if we have password
-                if let Ok(entry) = Entry::new(crate::constants::KEYRING_SERVICE_NAME, username) {
-                    match entry.get_password() {
-                        Ok(_) => {
-                            println!("Credentials found in keyring.");
-                            // Verify
-                            let client = crate::api::client::BitbucketClient::new(profile, None)?;
-                            match client.get_current_user().await {
-                                Ok(user) => println!(
-                                    "Status: Authenticated as {} ({})",
-                                    user.display_name, user.uuid
-                                ),
-                                Err(e) => println!("Status: Authentication failed: {}", e),
-                            }
-                        }
-                        Err(e) => {
-                            println!("Status: No password in keyring. Error: {}", e);
-                        }
-                    }
-                } else {
-                    println!("Status: Keyring error.");
+            match get_authenticated_user(profile).await {
+                Ok(user) => {
+                    display::success(&format!(
+                        "Authenticated as {} ({})",
+                        user.display_name, user.uuid
+                    ));
                 }
-            } else {
-                println!("Status: No user configured in active profile.");
+                Err(e) => {
+                    display::error(&format!("Not authenticated: {:#}", e));
+                    display::info("Run 'bb auth login' to authenticate");
+                }
             }
         }
     }
+
     Ok(())
 }

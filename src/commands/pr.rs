@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
+use crate::utils::display;
+
 #[derive(Args)]
 pub struct PrArgs {
     #[command(subcommand)]
@@ -59,10 +61,10 @@ pub async fn handle(
             let prs = client.list_pull_requests(&workspace, &repo, &state).await?;
 
             if prs.is_empty() {
-                println!(
+                display::info(&format!(
                     "No pull requests found in {}/{} with state {}",
                     workspace, repo, state
-                );
+                ));
                 return Ok(());
             }
 
@@ -101,7 +103,7 @@ pub async fn handle(
 
             if web {
                 open::that(pr.links.html.href)?;
-                println!("Opened PR #{} in browser", pr.id);
+                display::success(&format!("Opened PR #{} in browser", pr.id));
             } else {
                 println!("PR #{} - {}", pr.id, pr.title);
                 println!("State: {}", pr.state);
@@ -153,7 +155,7 @@ pub async fn handle(
                 .await?;
 
             if comments.is_empty() {
-                println!("No comments found for PR #{}", pr_id);
+                display::info(&format!("No comments found for PR #{}", pr_id));
                 return Ok(());
             }
 
