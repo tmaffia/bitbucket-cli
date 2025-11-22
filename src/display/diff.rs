@@ -68,3 +68,29 @@ fn format_colored_diff(diff_text: &str) -> String {
 
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_filename_valid() {
+        let line = "diff --git a/src/main.rs b/src/main.rs";
+        let filename = extract_filename_from_diff_line(line);
+        assert_eq!(filename, Some("src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn test_extract_filename_invalid_prefix() {
+        let line = "something else";
+        let filename = extract_filename_from_diff_line(line);
+        assert_eq!(filename, None);
+    }
+
+    #[test]
+    fn test_extract_filename_invalid_format() {
+        let line = "diff --git just_one_path";
+        let filename = extract_filename_from_diff_line(line);
+        assert_eq!(filename, None);
+    }
+}

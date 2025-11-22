@@ -178,3 +178,108 @@ pub fn init_local_config(workspace: &str, repo: &str, remote: &str) -> Result<()
     std::fs::write(&config_path, doc.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_get_active_profile_default() {
+        let mut profiles = HashMap::new();
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                workspace: "ws".to_string(),
+                user: Some("default_user".to_string()),
+                repository: None,
+                api_url: None,
+                output_format: None,
+                remote: None,
+            },
+        );
+
+        let config = AppConfig {
+            default_profile: None,
+            profiles: Some(profiles),
+        };
+
+        let profile = config.get_active_profile();
+        assert!(profile.is_some());
+        assert_eq!(profile.unwrap().workspace, "ws");
+        assert_eq!(profile.unwrap().user.as_deref(), Some("default_user"));
+    }
+
+    #[test]
+    fn test_get_active_profile_named() {
+        let mut profiles = HashMap::new();
+        profiles.insert(
+            "custom".to_string(),
+            ProfileConfig {
+                workspace: "custom_ws".to_string(),
+                user: Some("custom_user".to_string()),
+                repository: None,
+                api_url: None,
+                output_format: None,
+                remote: None,
+            },
+        );
+
+        let config = AppConfig {
+            default_profile: Some("custom".to_string()),
+            profiles: Some(profiles),
+        };
+
+        let profile = config.get_active_profile();
+        assert!(profile.is_some());
+        assert_eq!(profile.unwrap().workspace, "custom_ws");
+    }
+
+    #[test]
+    fn test_get_default_user() {
+        let mut profiles = HashMap::new();
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                workspace: "ws".to_string(),
+                user: Some("test_user".to_string()),
+                repository: None,
+                api_url: None,
+                output_format: None,
+                remote: None,
+            },
+        );
+
+        let config = AppConfig {
+            default_profile: None,
+            profiles: Some(profiles),
+        };
+
+        let user = config.get_default_user();
+        assert_eq!(user, Some("test_user".to_string()));
+    }
+
+    #[test]
+    fn test_get_default_user_none() {
+        let mut profiles = HashMap::new();
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                workspace: "ws".to_string(),
+                user: None,
+                repository: None,
+                api_url: None,
+                output_format: None,
+                remote: None,
+            },
+        );
+
+        let config = AppConfig {
+            default_profile: None,
+            profiles: Some(profiles),
+        };
+
+        let user = config.get_default_user();
+        assert_eq!(user, None);
+    }
+}

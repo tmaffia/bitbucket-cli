@@ -121,3 +121,88 @@ pub fn format_pr_list(prs: &[PullRequest]) -> String {
 
     formatting::format_table(headers, rows)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::models::*;
+
+    fn create_mock_pr(id: u32, title: &str) -> PullRequest {
+        PullRequest {
+            id,
+            title: title.to_string(),
+            description: None,
+            state: "OPEN".to_string(),
+            created_on: "2023-01-01".to_string(),
+            updated_on: "2023-01-02".to_string(),
+            author: User {
+                display_name: "Author Name".to_string(),
+                uuid: "123".to_string(),
+                nickname: None,
+            },
+            source: Source {
+                branch: Branch {
+                    name: "feature/branch".to_string(),
+                },
+                repository: Repository {
+                    name: "repo".to_string(),
+                    full_name: "owner/repo".to_string(),
+                    uuid: "456".to_string(),
+                },
+                commit: None,
+            },
+            destination: Source {
+                branch: Branch {
+                    name: "main".to_string(),
+                },
+                repository: Repository {
+                    name: "repo".to_string(),
+                    full_name: "owner/repo".to_string(),
+                    uuid: "456".to_string(),
+                },
+                commit: None,
+            },
+            links: Links {
+                html: Link {
+                    href: "http://example.com".to_string(),
+                },
+            },
+            participants: vec![],
+        }
+    }
+
+    #[test]
+    fn test_format_pr_list() {
+        let prs = vec![
+            create_mock_pr(1, "PR Title 1"),
+            create_mock_pr(2, "PR Title 2"),
+        ];
+
+        let output = format_pr_list(&prs);
+        let lines: Vec<&str> = output.lines().collect();
+
+        // Find header
+        let header_idx = lines.iter().position(|l| l.contains("ID") && l.contains("Title") && l.contains("Author"));
+        assert!(header_idx.is_some(), "Header not found");
+
+        // Find PR 1
+        let pr1_idx = lines.iter().position(|l| l.contains("1") && l.contains("PR Title 1") && l.contains("Author Name"));
+        assert!(pr1_idx.is_some(), "PR 1 row not found");
+
+        // Find PR 2
+        let pr2_idx = lines.iter().position(|l| l.contains("2") && l.contains("PR Title 2"));
+        assert!(pr2_idx.is_some(), "PR 2 row not found");
+
+        // Verify Order
+        assert!(header_idx.unwrap() < pr1_idx.unwrap());
+        assert!(pr1_idx.unwrap() < pr2_idx.unwrap());
+    }
+
+    #[test]
+    fn test_format_pr_list_empty() {
+        let prs: Vec<PullRequest> = vec![];
+        let output = format_pr_list(&prs);
+        assert!(output.contains("ID"));
+        assert!(output.contains("Title"));
+    }
+}
