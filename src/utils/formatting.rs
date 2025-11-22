@@ -5,14 +5,20 @@ use comfy_table::*;
 fn apply_table_style(table: &mut Table) {
     table
         .load_preset(UTF8_FULL)
-        .apply_modifier(modifiers::UTF8_ROUND_CORNERS)
-        .set_content_arrangement(ContentArrangement::Dynamic);
+        .apply_modifier(modifiers::UTF8_ROUND_CORNERS);
 }
 
+/// Print a key-value table to stdout
+///
+/// # Arguments
+///
+/// * `data` - Vector of (key, value) tuples
 pub fn print_key_value_table(data: Vec<(&str, String)>) {
     let mut table = Table::new();
     apply_table_style(&mut table);
-    table.set_width(80).set_header(vec!["Key", "Value"]);
+
+    let width = get_terminal_width();
+    table.set_width(width).set_header(vec!["Key", "Value"]);
 
     for (key, value) in data {
         table.add_row(vec![
@@ -24,14 +30,30 @@ pub fn print_key_value_table(data: Vec<(&str, String)>) {
     println!("{}", table);
 }
 
+/// Print a generic table to stdout
+///
+/// # Arguments
+///
+/// * `headers` - Vector of header strings
+/// * `rows` - Vector of rows, where each row is a vector of Cells
 pub fn print_table(headers: Vec<&str>, rows: Vec<Vec<Cell>>) {
     let table = format_table(headers, rows);
     println!("{}", table);
 }
 
+/// Format a table as a string
+///
+/// # Arguments
+///
+/// * `headers` - Vector of header strings
+/// * `rows` - Vector of rows, where each row is a vector of Cells
 pub fn format_table(headers: Vec<&str>, rows: Vec<Vec<Cell>>) -> String {
     let mut table = Table::new();
     apply_table_style(&mut table);
+
+    let width = get_terminal_width();
+    table.set_width(width);
+
     table.set_header(headers);
 
     for row in rows {
@@ -63,13 +85,19 @@ mod tests {
         // 3. Find Bob's line
         // 4. Ensure order matches
 
-        let header_line_idx = lines.iter().position(|l| l.contains("Name") && l.contains("Age"));
+        let header_line_idx = lines
+            .iter()
+            .position(|l| l.contains("Name") && l.contains("Age"));
         assert!(header_line_idx.is_some(), "Header line not found");
 
-        let alice_line_idx = lines.iter().position(|l| l.contains("Alice") && l.contains("30"));
+        let alice_line_idx = lines
+            .iter()
+            .position(|l| l.contains("Alice") && l.contains("30"));
         assert!(alice_line_idx.is_some(), "Row for Alice not found");
 
-        let bob_line_idx = lines.iter().position(|l| l.contains("Bob") && l.contains("25"));
+        let bob_line_idx = lines
+            .iter()
+            .position(|l| l.contains("Bob") && l.contains("25"));
         assert!(bob_line_idx.is_some(), "Row for Bob not found");
 
         // Verify order: Header -> Alice -> Bob
@@ -91,4 +119,13 @@ mod tests {
         assert!(output.contains("Col1"));
         assert!(output.contains("Col2"));
     }
+}
+
+/// Get terminal width, with fallback to default
+fn get_terminal_width() -> u16 {
+    use crossterm::terminal;
+
+    terminal::size()
+        .map(|(w, _)| w.min(crate::constants::MAX_TABLE_WIDTH))
+        .unwrap_or(crate::constants::DEFAULT_TABLE_WIDTH)
 }

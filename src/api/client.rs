@@ -2,6 +2,10 @@ use anyhow::{Context, Result};
 use reqwest::{Client, Method, RequestBuilder};
 use serde::de::DeserializeOwned;
 
+/// Bitbucket API Client
+///
+/// Handles communication with the Bitbucket Cloud API v2.0.
+/// Supports authentication via Basic Auth (App Password).
 pub struct BitbucketClient {
     client: Client,
     base_url: String,
@@ -9,10 +13,13 @@ pub struct BitbucketClient {
 }
 
 impl BitbucketClient {
-    pub fn new(
-        base_url: String,
-        auth: Option<(String, String)>,
-    ) -> Result<Self> {
+    /// Create a new Bitbucket API client
+    ///
+    /// # Arguments
+    ///
+    /// * `base_url` - The base URL for the Bitbucket API
+    /// * `auth` - Optional tuple of (username, password/token) for Basic Auth
+    pub fn new(base_url: String, auth: Option<(String, String)>) -> Result<Self> {
         let client = Client::builder()
             .build()
             .context("Failed to build HTTP client")?;
@@ -49,6 +56,11 @@ impl BitbucketClient {
         request
     }
 
+    /// Perform a GET request to the Bitbucket API
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The API path (relative to base URL) or full URL
     pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
         let response = self
             .build_request(Method::GET, path)
@@ -60,8 +72,15 @@ impl BitbucketClient {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
-            return Err(anyhow::anyhow!("API request failed ({}) : {}", status, error_text));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(anyhow::anyhow!(
+                "API request failed ({}) : {}",
+                status,
+                error_text
+            ));
         }
 
         let data = response
@@ -71,6 +90,14 @@ impl BitbucketClient {
         Ok(data)
     }
 
+    /// List pull requests for a repository
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `state` - Filter by PR state (e.g., "OPEN", "MERGED", "DECLINED")
+    /// * `limit` - Optional maximum number of PRs to return
     pub async fn list_pull_requests(
         &self,
         workspace: &str,
@@ -87,14 +114,15 @@ impl BitbucketClient {
         loop {
             let response: crate::api::models::PaginatedResponse<crate::api::models::PullRequest> =
                 self.get(&path).await?;
-            
+
             all_prs.extend(response.values);
 
-            if let Some(max) = limit {
-                if all_prs.len() >= max as usize {
-                    all_prs.truncate(max as usize);
-                    break;
-                }
+            // Check if we've reached the limit
+            let limit_reached = limit.map_or(false, |max| all_prs.len() >= max as usize);
+
+            if limit_reached {
+                all_prs.truncate(limit.unwrap() as usize);
+                break;
             }
 
             match response.next {
@@ -102,10 +130,17 @@ impl BitbucketClient {
                 None => break,
             }
         }
-        
+
         Ok(all_prs)
     }
 
+    /// Get a single pull request by ID
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
     pub async fn get_pull_request(
         &self,
         workspace: &str,
@@ -116,6 +151,13 @@ impl BitbucketClient {
         self.get(&path).await
     }
 
+    /// Get the diff for a pull request
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
     pub async fn get_pull_request_diff(
         &self,
         workspace: &str,
@@ -134,14 +176,28 @@ impl BitbucketClient {
 
         if !response.status().is_success() {
             let status = response.status();
-            let error_text = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
-            return Err(anyhow::anyhow!("API request failed ({}) : {}", status, error_text));
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(anyhow::anyhow!(
+                "API request failed ({}) : {}",
+                status,
+                error_text
+            ));
         }
 
         let text = response.text().await.context("Failed to get diff text")?;
         Ok(text)
     }
 
+    /// Get build/commit statuses for a commit
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `commit_hash` - The commit hash
     pub async fn get_commit_statuses(
         &self,
         workspace: &str,
@@ -157,6 +213,13 @@ impl BitbucketClient {
         Ok(response.values)
     }
 
+    /// Get comments for a pull request
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
     pub async fn get_pull_request_comments(
         &self,
         workspace: &str,
@@ -172,6 +235,13 @@ impl BitbucketClient {
         Ok(response.values)
     }
 
+    /// Find a pull request by source branch name
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `branch_name` - The source branch name
     pub async fn find_pull_request_by_branch(
         &self,
         workspace: &str,
@@ -205,6 +275,7 @@ impl BitbucketClient {
         Ok(response.values.into_iter().next())
     }
 
+    /// Get the currently authenticated user
     pub async fn get_current_user(&self) -> Result<crate::api::models::User> {
         self.get("/user").await
     }
@@ -222,33 +293,33 @@ mod tests {
         )
         .unwrap();
 
-        let request = client
-            .build_request(Method::GET, "/user")
-            .build()
-            .unwrap();
+        let request = client.build_request(Method::GET, "/user").build().unwrap();
 
         let auth_header = request.headers().get(reqwest::header::AUTHORIZATION);
-        assert!(auth_header.is_some(), "Authorization header should be present");
-        
+        assert!(
+            auth_header.is_some(),
+            "Authorization header should be present"
+        );
+
         // Check that it's Basic auth
         let auth_str = auth_header.unwrap().to_str().unwrap();
-        assert!(auth_str.starts_with("Basic "), "Authorization header should be Basic auth");
+        assert!(
+            auth_str.starts_with("Basic "),
+            "Authorization header should be Basic auth"
+        );
     }
 
     #[test]
     fn test_no_auth_header() {
-        let client = BitbucketClient::new(
-            "https://api.bitbucket.org/2.0".to_string(),
-            None,
-        )
-        .unwrap();
+        let client =
+            BitbucketClient::new("https://api.bitbucket.org/2.0".to_string(), None).unwrap();
 
-        let request = client
-            .build_request(Method::GET, "/user")
-            .build()
-            .unwrap();
+        let request = client.build_request(Method::GET, "/user").build().unwrap();
 
         let auth_header = request.headers().get(reqwest::header::AUTHORIZATION);
-        assert!(auth_header.is_none(), "Authorization header should NOT be present");
+        assert!(
+            auth_header.is_none(),
+            "Authorization header should NOT be present"
+        );
     }
 }

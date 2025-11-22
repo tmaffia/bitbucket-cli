@@ -10,6 +10,15 @@ pub struct AppConfig {
     pub profiles: Option<std::collections::HashMap<String, ProfileConfig>>,
 }
 
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            default_profile: None,
+            profiles: None,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct ProfileConfig {
     pub workspace: String,

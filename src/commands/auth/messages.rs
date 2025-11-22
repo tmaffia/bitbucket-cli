@@ -1,0 +1,16 @@
+/// Authentication-related user-facing messages
+pub mod auth {
+    pub const EMPTY_EMAIL: &str = "Email cannot be empty";
+    pub const EMPTY_PASSWORD: &str = "App Password cannot be empty";
+    pub const NO_USER_CONFIGURED: &str = "No user configured in active profile";
+    pub const LOGIN_REQUIRED: &str = "Run 'bb auth login' to authenticate";
+    pub const VERIFYING_CREDENTIALS: &str = "Verifying credentials...";
+    pub const AUTH_SUCCESS: &str = "Authentication successful!";
+    pub const CREDENTIALS_SAVED: &str = "Credentials saved for user '{}'";
+    pub const LOGOUT_USER: &str = "Logging out user: {}";
+    pub const LOGGED_OUT: &str = "Logged out {}";
+    pub const NO_USERNAME: &str = "No username provided";
+    pub const CHECKING_STATUS: &str = "Checking authentication status...";
+    pub const AUTHENTICATED: &str = "Authenticated";
+    pub const NOT_AUTHENTICATED: &str = "Not authenticated";
+}

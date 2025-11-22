@@ -36,10 +36,8 @@ async fn get_authenticated_user(profile: Option<&ProfileConfig>) -> Result<User>
         .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
 
     // Verify credentials against API
-    let client = crate::api::client::BitbucketClient::new(
-        base_url,
-        Some((username.clone(), password)),
-    )?;
+    let client =
+        crate::api::client::BitbucketClient::new(base_url, Some((username.clone(), password)))?;
     client
         .get_current_user()
         .await
@@ -79,6 +77,9 @@ fn check_logout(username: &str) -> Result<()> {
     Ok(())
 }
 
+mod messages;
+use messages::auth as msg;
+
 // TODO: Improve view layer of this command.
 pub async fn handle(args: AuthArgs) -> Result<()> {
     match args.command {
@@ -90,7 +91,7 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
             let username = username.trim();
 
             if username.is_empty() {
-                ui::error("Email cannot be empty");
+                ui::error(msg::EMPTY_EMAIL);
                 return Ok(());
             }
 
@@ -101,19 +102,19 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
             let password = password.trim();
 
             if password.is_empty() {
-                ui::error("App Password cannot be empty");
+                ui::error(msg::EMPTY_PASSWORD);
                 return Ok(());
             }
 
-            ui::info("Verifying credentials...");
+            ui::info(msg::VERIFYING_CREDENTIALS);
 
             let config = crate::config::manager::AppConfig::load().ok();
             let profile = config.as_ref().and_then(|c| c.get_active_profile());
 
             match check_login(profile, username, &password).await {
                 Ok(user) => {
-                    ui::success("Authentication successful!");
-                    ui::info(&format!("Credentials saved for user '{}'", username));
+                    ui::success(msg::AUTH_SUCCESS);
+                    ui::info(&msg::CREDENTIALS_SAVED.replace("{}", &username));
 
                     let mut user_info =
                         vec![("Display Name", user.display_name), ("UUID", user.uuid)];
@@ -133,7 +134,7 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
             let default_user = config.as_ref().and_then(|c| c.get_default_user());
 
             let username = if let Some(user) = default_user.as_ref() {
-                ui::info(&format!("Logging out user: {}", user));
+                ui::info(&msg::LOGOUT_USER.replace("{}", &user));
                 user.clone()
             } else {
                 print!("Username to logout: ");
@@ -143,26 +144,26 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
                 let user = input.trim();
 
                 if user.is_empty() {
-                    ui::error("No username provided");
+                    ui::error(msg::NO_USERNAME);
                     return Ok(());
                 }
                 user.to_string()
             };
 
             match check_logout(&username) {
-                Ok(_) => ui::success(&format!("Logged out {}", username)),
+                Ok(_) => ui::success(&msg::LOGGED_OUT.replace("{}", &username)),
                 Err(e) => ui::error(&format!("Logout failed: {:#}", e)),
             }
         }
         AuthCommands::Status => {
-            ui::info("Checking authentication status...");
+            ui::info(msg::CHECKING_STATUS);
 
             let config = crate::config::manager::AppConfig::load()?;
             let profile = config.get_active_profile();
 
             match get_authenticated_user(profile).await {
                 Ok(user) => {
-                    ui::success("Authenticated");
+                    ui::success(msg::AUTHENTICATED);
                     let mut user_info =
                         vec![("Display Name", user.display_name), ("UUID", user.uuid)];
                     if let Some(nickname) = user.nickname {
@@ -172,8 +173,8 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
                     crate::utils::formatting::print_key_value_table(user_info);
                 }
                 Err(e) => {
-                    ui::error(&format!("Not authenticated: {:#}", e));
-                    ui::info("Run 'bb auth login' to authenticate");
+                    ui::error(&format!("{}: {:#}", msg::NOT_AUTHENTICATED, e));
+                    ui::info(msg::LOGIN_REQUIRED);
                 }
             }
         }

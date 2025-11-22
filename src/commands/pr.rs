@@ -193,6 +193,12 @@ pub async fn handle(
     Ok(())
 }
 
+/// Resolve repository information from overrides or git configuration
+///
+/// # Arguments
+///
+/// * `repo_override` - Optional "workspace/repo" string
+/// * `remote_override` - Optional git remote name
 fn resolve_repo_info(
     repo_override: Option<String>,
     remote_override: Option<String>,
@@ -210,6 +216,14 @@ fn resolve_repo_info(
     }
 }
 
+/// Resolve Pull Request ID from argument or current branch
+///
+/// # Arguments
+///
+/// * `id` - Optional explicit PR ID
+/// * `client` - Bitbucket API client
+/// * `workspace` - Workspace ID/slug
+/// * `repo` - Repository slug
 async fn resolve_pr_id(
     id: Option<u32>,
     client: &BitbucketClient,
