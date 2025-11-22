@@ -54,12 +54,15 @@ impl BitbucketClient {
     }
 
     fn build_request(&self, method: Method, path: &str) -> RequestBuilder {
-        // Ensure we don't double-slash or miss a slash
-        let url = format!(
-            "{}/{}",
-            self.base_url.trim_end_matches('/'),
-            path.trim_start_matches('/')
-        );
+        let url = if path.starts_with("http://") || path.starts_with("https://") {
+            path.to_string()
+        } else {
+            format!(
+                "{}/{}",
+                self.base_url.trim_end_matches('/'),
+                path.trim_start_matches('/')
+            )
+        };
 
         let mut request = self.client.request(method, &url);
 
@@ -94,14 +97,34 @@ impl BitbucketClient {
         workspace: &str,
         repo: &str,
         state: &str,
+        limit: Option<u32>,
     ) -> Result<Vec<crate::api::models::PullRequest>> {
-        let path = format!(
+        let mut all_prs = Vec::new();
+        let mut path = format!(
             "/repositories/{}/{}/pullrequests?state={}",
             workspace, repo, state
         );
-        let response: crate::api::models::PaginatedResponse<crate::api::models::PullRequest> =
-            self.get(&path).await?;
-        Ok(response.values)
+
+        loop {
+            let response: crate::api::models::PaginatedResponse<crate::api::models::PullRequest> =
+                self.get(&path).await?;
+            
+            all_prs.extend(response.values);
+
+            if let Some(max) = limit {
+                if all_prs.len() >= max as usize {
+                    all_prs.truncate(max as usize);
+                    break;
+                }
+            }
+
+            match response.next {
+                Some(next_url) => path = next_url,
+                None => break,
+            }
+        }
+        
+        Ok(all_prs)
     }
 
     pub async fn get_pull_request(
@@ -174,16 +197,15 @@ impl BitbucketClient {
         repo: &str,
         branch_name: &str,
     ) -> Result<Option<crate::api::models::PullRequest>> {
-        // Fetch open PRs
-        // TODO: Use server-side filtering with `q` parameter for better performance
-        let prs = self.list_pull_requests(workspace, repo, "OPEN").await?;
+        let path = format!(
+            "/repositories/{}/{}/pullrequests?q=source.branch.name=\"{}\"&state=OPEN",
+            workspace, repo, branch_name
+        );
 
-        // Find matching branch
-        let pr = prs
-            .into_iter()
-            .find(|pr| pr.source.branch.name == branch_name);
+        let response: crate::api::models::PaginatedResponse<crate::api::models::PullRequest> =
+            self.get(&path).await?;
 
-        Ok(pr)
+        Ok(response.values.into_iter().next())
     }
 
     pub async fn get_current_user(&self) -> Result<crate::api::models::User> {

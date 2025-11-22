@@ -16,6 +16,10 @@ pub enum PrCommands {
         /// Filter by state
         #[arg(long, default_value = "OPEN")]
         state: String,
+
+        /// Max number of PRs to fetch
+        #[arg(long, default_value = "50")]
+        limit: u32,
     },
     /// View a pull request
     View {
@@ -55,7 +59,7 @@ pub async fn handle(
     client: &BitbucketClient,
 ) -> Result<()> {
     match args.command {
-        PrCommands::List { state } => {
+        PrCommands::List { state, limit } => {
             let (workspace, repo) = if let Some(r) = repo_override {
                 let parts: Vec<&str> = r.split('/').collect();
                 if parts.len() != 2 {
@@ -68,7 +72,9 @@ pub async fn handle(
                 crate::git::get_repo_info()?
             };
 
-            let prs = client.list_pull_requests(&workspace, &repo, &state).await?;
+            let prs = client
+                .list_pull_requests(&workspace, &repo, &state, Some(limit))
+                .await?;
 
             if prs.is_empty() {
                 ui::info(&format!(
@@ -78,7 +84,12 @@ pub async fn handle(
                 return Ok(());
             }
 
-            pr_display::print_pr_list(&prs);
+            let table = pr_display::format_pr_list(&prs);
+            if ui::should_use_pager() {
+                ui::display_in_pager(&table)?;
+            } else {
+                println!("{}", table);
+            }
         }
         PrCommands::View { id, web, comments } => {
             let (workspace, repo) = if let Some(r) = repo_override {

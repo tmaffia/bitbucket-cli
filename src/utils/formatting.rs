@@ -25,6 +25,11 @@ pub fn print_key_value_table(data: Vec<(&str, String)>) {
 }
 
 pub fn print_table(headers: Vec<&str>, rows: Vec<Vec<Cell>>) {
+    let table = format_table(headers, rows);
+    println!("{}", table);
+}
+
+pub fn format_table(headers: Vec<&str>, rows: Vec<Vec<Cell>>) -> String {
     let mut table = Table::new();
     apply_table_style(&mut table);
     table.set_header(headers);
@@ -33,5 +38,5 @@ pub fn print_table(headers: Vec<&str>, rows: Vec<Vec<Cell>>) {
         table.add_row(row);
     }
 
-    println!("{}", table);
+    table.to_string()
 }

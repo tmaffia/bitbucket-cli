@@ -99,6 +99,11 @@ pub fn print_comments(comments: &[Comment]) {
 }
 
 pub fn print_pr_list(prs: &[PullRequest]) {
+    let output = format_pr_list(prs);
+    println!("{}", output);
+}
+
+pub fn format_pr_list(prs: &[PullRequest]) -> String {
     let headers = vec!["ID", "Title", "Author", "Source", "State", "Updated"];
     let rows: Vec<Vec<Cell>> = prs
         .iter()
@@ -114,5 +119,5 @@ pub fn print_pr_list(prs: &[PullRequest]) {
         })
         .collect();
 
-    formatting::print_table(headers, rows);
+    formatting::format_table(headers, rows)
 }
