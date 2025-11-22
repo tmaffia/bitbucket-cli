@@ -20,20 +20,20 @@ pub fn print_diff(diff_text: &str) -> Result<()> {
 pub fn print_filenames_only(diff_text: &str) {
     for line in diff_text.lines() {
         // Parse unified diff format: "diff --git a/path b/path"
-        if line.starts_with("diff --git") {
-            if let Some(filename) = extract_filename_from_diff_line(line) {
-                println!("{}", filename);
-            }
+        if line.starts_with("diff --git")
+            && let Some(filename) = extract_filename_from_diff_line(line)
+        {
+            println!("{}", filename);
         }
     }
 }
 
 /// Extract filename from a "diff --git a/path b/path" line
 fn extract_filename_from_diff_line(line: &str) -> Option<String> {
-    if let Some(rest) = line.strip_prefix("diff --git ") {
-        if let Some((_, dest)) = rest.split_once(" b/") {
-            return Some(dest.to_string());
-        }
+    if let Some(rest) = line.strip_prefix("diff --git ")
+        && let Some((_, dest)) = rest.split_once(" b/")
+    {
+        return Some(dest.to_string());
     }
     None
 }

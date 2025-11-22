@@ -3,7 +3,7 @@ use std::process::Command;
 
 pub fn get_current_branch() -> Result<String> {
     let output = Command::new("git")
-        .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .context("Failed to execute git command")?;
 
@@ -23,7 +23,7 @@ pub fn get_repo_info(remote_name: Option<&str>) -> Result<(String, String)> {
     let remote = remote_name.unwrap_or("origin");
     // Get remote URL
     let output = Command::new("git")
-        .args(&["remote", "get-url", remote])
+        .args(["remote", "get-url", remote])
         .output()
         .context("Failed to execute git command")?;
 
@@ -46,15 +46,15 @@ fn parse_git_url(url: &str) -> Result<(String, String)> {
     // - https://bitbucket.org/workspace/repo.git
     // - https://username@bitbucket.org/workspace/repo.git
     // - ssh://git@bitbucket.org/workspace/repo.git
-    
+
     let cleaned = url
         .trim_start_matches("ssh://")
         .trim_start_matches("git@")
         .trim_start_matches("https://")
         .trim_start_matches("http://");
-        
+
     // If there is an '@' now, it's likely "username@host", so take everything after the last '@'
-    let cleaned = cleaned.split('@').last().unwrap_or(cleaned);
+    let cleaned = cleaned.split('@').next_back().unwrap_or(cleaned);
 
     // Handle bitbucket.org prefix
     let path = cleaned
@@ -95,10 +95,7 @@ mod tests {
                 "ssh://git@bitbucket.org/workspace/repo.git",
                 ("workspace", "repo"),
             ),
-            (
-                "git@bitbucket.org:workspace/repo",
-                ("workspace", "repo"),
-            ),
+            ("git@bitbucket.org:workspace/repo", ("workspace", "repo")),
             (
                 "https://bitbucket.org/workspace/repo",
                 ("workspace", "repo"),
@@ -107,7 +104,11 @@ mod tests {
 
         for (url, (expected_workspace, expected_repo)) in cases {
             let (workspace, repo) = parse_git_url(url).expect(&format!("Failed to parse {}", url));
-            assert_eq!(workspace, expected_workspace, "Workspace mismatch for {}", url);
+            assert_eq!(
+                workspace, expected_workspace,
+                "Workspace mismatch for {}",
+                url
+            );
             assert_eq!(repo, expected_repo, "Repo mismatch for {}", url);
         }
     }

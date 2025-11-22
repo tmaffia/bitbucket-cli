@@ -109,10 +109,10 @@ pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
             let config = crate::config::manager::ProfileConfig::load().ok();
             let profile = config.as_ref().and_then(|c| c.get_active_profile());
 
-            match check_login(profile, username, &password).await {
+            match check_login(profile, username, password).await {
                 Ok(user) => {
                     ui::success(msg::AUTH_SUCCESS);
-                    ui::info(&msg::CREDENTIALS_SAVED.replace("{}", &username));
+                    ui::info(&msg::CREDENTIALS_SAVED.replace("{}", username));
 
                     let mut user_info =
                         vec![("Display Name", user.display_name), ("UUID", user.uuid)];
@@ -132,7 +132,7 @@ pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
             let default_user = config.as_ref().and_then(|c| c.get_default_user());
 
             let username = if let Some(user) = default_user.as_ref() {
-                ui::info(&msg::LOGOUT_USER.replace("{}", &user));
+                ui::info(&msg::LOGOUT_USER.replace("{}", user));
                 user.clone()
             } else {
                 print!("Username to logout: ");
