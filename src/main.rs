@@ -49,6 +49,7 @@ enum Commands {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    utils::debug::set_enabled(cli.verbose);
 
     // Load configuration
     let config = match config::manager::AppConfig::load() {
@@ -70,10 +71,40 @@ async fn main() {
         .profile
         .or(config.default_profile.clone())
         .unwrap_or_else(|| "default".to_string());
+    
+    utils::debug::log(&format!("Active profile: {}", profile_name));
+
     let profile = config.profiles.as_ref().and_then(|p| p.get(&profile_name));
 
+    if let Some(p) = profile {
+        utils::debug::log(&format!("Profile loaded. User: {:?}", p.user));
+    } else {
+        utils::debug::log(&format!("Profile '{}' NOT found in config.", profile_name));
+    }
+
+    // Resolve Base URL
+    let base_url = profile
+        .and_then(|p| p.api_url.clone())
+        .unwrap_or_else(|| constants::DEFAULT_API_URL.to_string());
+
+    // Resolve Auth
+    let mut auth = None;
+    if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
+        match utils::auth::get_credentials(username) {
+            Ok(password) => {
+                utils::debug::log(&format!("Credentials found for user '{}'", username));
+                auth = Some((username.clone(), password));
+            }
+            Err(e) => {
+                utils::debug::log(&format!("Failed to load credentials for user '{}': {}", username, e));
+            }
+        }
+    } else {
+        utils::debug::log("No user configured in profile. Running unauthenticated.");
+    }
+
     // Initialize API client
-    let client = match api::client::BitbucketClient::new(profile, None) {
+    let client = match api::client::BitbucketClient::new(base_url, auth) {
         Ok(c) => c,
         Err(e) => {
             display::ui::error(&format!("Error initializing client: {}", e));

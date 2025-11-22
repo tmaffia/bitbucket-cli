@@ -30,13 +30,10 @@ pub fn print_filenames_only(diff_text: &str) {
 
 /// Extract filename from a "diff --git a/path b/path" line
 fn extract_filename_from_diff_line(line: &str) -> Option<String> {
-    // Format: "diff --git a/filename b/filename"
-    // We want the "b/" version (destination file)
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() >= 4 && parts[0] == "diff" && parts[1] == "--git" {
-        // parts[3] is "b/filename"
-        let path = parts[3].strip_prefix("b/").unwrap_or(parts[3]);
-        return Some(path.to_string());
+    if let Some(rest) = line.strip_prefix("diff --git ") {
+        if let Some((_, dest)) = rest.split_once(" b/") {
+            return Some(dest.to_string());
+        }
     }
     None
 }

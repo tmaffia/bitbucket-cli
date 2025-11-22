@@ -29,10 +29,17 @@ async fn get_authenticated_user(profile: Option<&ProfileConfig>) -> Result<User>
         .ok_or_else(|| anyhow!("No user configured in active profile"))?;
 
     // Verify password exists in keyring
-    let _password = crate::utils::auth::get_credentials(username)?;
+    let password = crate::utils::auth::get_credentials(username)?;
+
+    let base_url = profile
+        .and_then(|p| p.api_url.clone())
+        .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
 
     // Verify credentials against API
-    let client = crate::api::client::BitbucketClient::new(profile, None)?;
+    let client = crate::api::client::BitbucketClient::new(
+        base_url,
+        Some((username.clone(), password)),
+    )?;
     client
         .get_current_user()
         .await
@@ -45,9 +52,13 @@ async fn check_login(
     username: &str,
     password: &str,
 ) -> Result<User> {
+    let base_url = profile
+        .and_then(|p| p.api_url.clone())
+        .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
+
     // Verify credentials work with API first
     let client = crate::api::client::BitbucketClient::new(
-        profile,
+        base_url,
         Some((username.to_string(), password.to_string())),
     )?;
     let user = client

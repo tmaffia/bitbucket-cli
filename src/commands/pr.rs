@@ -60,21 +60,16 @@ pub async fn handle(
 ) -> Result<()> {
     match args.command {
         PrCommands::List { state, limit } => {
-            let (workspace, repo) = if let Some(r) = repo_override {
-                let parts: Vec<&str> = r.split('/').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow::anyhow!(
-                        "Invalid repo format. Expected workspace/repo"
-                    ));
-                }
-                (parts[0].to_string(), parts[1].to_string())
-            } else {
-                crate::git::get_repo_info()?
-            };
+            let (workspace, repo) = resolve_repo_info(repo_override)?;
 
             let prs = client
                 .list_pull_requests(&workspace, &repo, &state, Some(limit))
                 .await?;
+
+            if json {
+                ui::print_json(&prs)?;
+                return Ok(());
+            }
 
             if prs.is_empty() {
                 ui::info(&format!(
@@ -92,17 +87,7 @@ pub async fn handle(
             }
         }
         PrCommands::View { id, web, comments } => {
-            let (workspace, repo) = if let Some(r) = repo_override {
-                let parts: Vec<&str> = r.split('/').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow::anyhow!(
-                        "Invalid repo format. Expected workspace/repo"
-                    ));
-                }
-                (parts[0].to_string(), parts[1].to_string())
-            } else {
-                crate::git::get_repo_info()?
-            };
+            let (workspace, repo) = resolve_repo_info(repo_override)?;
 
             let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
             let pr = client.get_pull_request(&workspace, &repo, pr_id).await?;
@@ -156,17 +141,7 @@ pub async fn handle(
             }
         }
         PrCommands::Diff { id, name_only, web } => {
-            let (workspace, repo) = if let Some(r) = repo_override {
-                let parts: Vec<&str> = r.split('/').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow::anyhow!(
-                        "Invalid repo format. Expected workspace/repo"
-                    ));
-                }
-                (parts[0].to_string(), parts[1].to_string())
-            } else {
-                crate::git::get_repo_info()?
-            };
+            let (workspace, repo) = resolve_repo_info(repo_override)?;
 
             let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
 
@@ -194,17 +169,7 @@ pub async fn handle(
             }
         }
         PrCommands::Comments { id } => {
-            let (workspace, repo) = if let Some(r) = repo_override {
-                let parts: Vec<&str> = r.split('/').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow::anyhow!(
-                        "Invalid repo format. Expected workspace/repo"
-                    ));
-                }
-                (parts[0].to_string(), parts[1].to_string())
-            } else {
-                crate::git::get_repo_info()?
-            };
+            let (workspace, repo) = resolve_repo_info(repo_override)?;
 
             let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
 
@@ -225,6 +190,20 @@ pub async fn handle(
         }
     }
     Ok(())
+}
+
+fn resolve_repo_info(repo_override: Option<String>) -> Result<(String, String)> {
+    if let Some(r) = repo_override {
+        let parts: Vec<&str> = r.split('/').collect();
+        if parts.len() != 2 {
+            return Err(anyhow::anyhow!(
+                "Invalid repo format. Expected workspace/repo"
+            ));
+        }
+        Ok((parts[0].to_string(), parts[1].to_string()))
+    } else {
+        crate::git::get_repo_info()
+    }
 }
 
 async fn resolve_pr_id(

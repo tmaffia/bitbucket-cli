@@ -1,4 +1,3 @@
-use crate::config::manager::ProfileConfig;
 use anyhow::{Context, Result};
 use reqwest::{Client, Method, RequestBuilder};
 use serde::de::DeserializeOwned;
@@ -11,49 +10,21 @@ pub struct BitbucketClient {
 
 impl BitbucketClient {
     pub fn new(
-        profile: Option<&ProfileConfig>,
-        auth_override: Option<(String, String)>,
+        base_url: String,
+        auth: Option<(String, String)>,
     ) -> Result<Self> {
-        let base_url = profile
-            .and_then(|p| p.api_url.clone())
-            .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
-
-        let mut auth_header = auth_override;
-
-        if auth_header.is_none() {
-            if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
-                if let Ok(entry) =
-                    keyring::Entry::new(crate::constants::KEYRING_SERVICE_NAME, username)
-                {
-                    if let Ok(password) = entry.get_password() {
-                        auth_header = Some((username.clone(), password));
-                    }
-                }
-            }
-        }
-
-        let client_builder = Client::builder();
-
-        // If we have auth header, add it as default basic auth
-        // Note: reqwest::ClientBuilder has .default_headers but for basic auth it's per request usually,
-        // or we can use .default_basic_auth() if we want it for all requests.
-        // But BitbucketClient wraps Client.
-        // Let's store it in the struct and apply it in `get`.
-        // Actually, better to use a middleware or just apply it manually.
-        // Storing in `auth_header` field is fine.
-
-        let client = client_builder
+        let client = Client::builder()
             .build()
             .context("Failed to build HTTP client")?;
 
         Ok(Self {
             client,
             base_url,
-            auth_header,
+            auth_header: auth,
         })
     }
 
-    fn build_request(&self, method: Method, path: &str) -> RequestBuilder {
+    pub(crate) fn build_request(&self, method: Method, path: &str) -> RequestBuilder {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
             path.to_string()
         } else {
@@ -64,10 +35,15 @@ impl BitbucketClient {
             )
         };
 
+        crate::utils::debug::log(&format!("Requesting: {} {}", method, url));
+
         let mut request = self.client.request(method, &url);
 
         if let Some((username, password)) = &self.auth_header {
+            crate::utils::debug::log(&format!("Adding Basic Auth for user: {}", username));
             request = request.basic_auth(username, Some(password));
+        } else {
+            crate::utils::debug::log("No Auth header present for this request.");
         }
 
         request
@@ -80,9 +56,12 @@ impl BitbucketClient {
             .await
             .context("Failed to send request")?;
 
+        crate::utils::debug::log(&format!("Response status: {}", response.status()));
+
         if !response.status().is_success() {
-            // TODO: Better error handling
-            return Err(anyhow::anyhow!("API request failed: {}", response.status()));
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(anyhow::anyhow!("API request failed ({}) : {}", status, error_text));
         }
 
         let data = response
@@ -154,7 +133,9 @@ impl BitbucketClient {
             .context("Failed to send request")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("API request failed: {}", response.status()));
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            return Err(anyhow::anyhow!("API request failed ({}) : {}", status, error_text));
         }
 
         let text = response.text().await.context("Failed to get diff text")?;
@@ -197,18 +178,77 @@ impl BitbucketClient {
         repo: &str,
         branch_name: &str,
     ) -> Result<Option<crate::api::models::PullRequest>> {
-        let path = format!(
-            "/repositories/{}/{}/pullrequests?q=source.branch.name=\"{}\"&state=OPEN",
-            workspace, repo, branch_name
-        );
+        let path = format!("repositories/{}/{}/pullrequests", workspace, repo);
+
+        // Ensure base URL ends with slash for join to work as expected (appending)
+        // otherwise /2.0 gets replaced by /repositories
+        let base = if self.base_url.ends_with('/') {
+            self.base_url.clone()
+        } else {
+            format!("{}/", self.base_url)
+        };
+
+        // Construct URL safely using reqwest::Url to handle query encoding
+        let mut url = reqwest::Url::parse(&base)
+            .context("Invalid base URL")?
+            .join(&path)
+            .context("Failed to join path")?;
+
+        let query = format!("source.branch.name=\"{}\"", branch_name);
+        url.query_pairs_mut()
+            .append_pair("q", &query)
+            .append_pair("state", "OPEN");
 
         let response: crate::api::models::PaginatedResponse<crate::api::models::PullRequest> =
-            self.get(&path).await?;
+            self.get(url.as_str()).await?;
 
         Ok(response.values.into_iter().next())
     }
 
     pub async fn get_current_user(&self) -> Result<crate::api::models::User> {
         self.get("/user").await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_header_presence() {
+        let client = BitbucketClient::new(
+            "https://api.bitbucket.org/2.0".to_string(),
+            Some(("user".to_string(), "pass".to_string())),
+        )
+        .unwrap();
+
+        let request = client
+            .build_request(Method::GET, "/user")
+            .build()
+            .unwrap();
+
+        let auth_header = request.headers().get(reqwest::header::AUTHORIZATION);
+        assert!(auth_header.is_some(), "Authorization header should be present");
+        
+        // Check that it's Basic auth
+        let auth_str = auth_header.unwrap().to_str().unwrap();
+        assert!(auth_str.starts_with("Basic "), "Authorization header should be Basic auth");
+    }
+
+    #[test]
+    fn test_no_auth_header() {
+        let client = BitbucketClient::new(
+            "https://api.bitbucket.org/2.0".to_string(),
+            None,
+        )
+        .unwrap();
+
+        let request = client
+            .build_request(Method::GET, "/user")
+            .build()
+            .unwrap();
+
+        let auth_header = request.headers().get(reqwest::header::AUTHORIZATION);
+        assert!(auth_header.is_none(), "Authorization header should NOT be present");
     }
 }
