@@ -2,7 +2,7 @@
 pub mod auth {
     pub const EMPTY_EMAIL: &str = "Email cannot be empty";
     pub const EMPTY_PASSWORD: &str = "App Password cannot be empty";
-    pub const NO_USER_CONFIGURED: &str = "No user configured in active profile";
+
     pub const LOGIN_REQUIRED: &str = "Run 'bb auth login' to authenticate";
     pub const VERIFYING_CREDENTIALS: &str = "Verifying credentials...";
     pub const AUTH_SUCCESS: &str = "Authentication successful!";

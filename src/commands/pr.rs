@@ -52,22 +52,20 @@ pub enum PrCommands {
 
 use crate::api::client::BitbucketClient;
 
-pub async fn handle(
-    args: PrArgs,
-    repo_override: Option<String>,
-    remote_override: Option<String>,
-    json: bool,
-    client: &BitbucketClient,
-) -> Result<()> {
+use crate::context::AppContext;
+
+pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
     match args.command {
         PrCommands::List { state, limit } => {
-            let (workspace, repo) = resolve_repo_info(repo_override, remote_override)?;
+            let (workspace, repo) =
+                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
 
-            let prs = client
+            let prs = ctx
+                .client
                 .list_pull_requests(&workspace, &repo, &state, Some(limit))
                 .await?;
 
-            if json {
+            if ctx.json {
                 ui::print_json(&prs)?;
                 return Ok(());
             }
@@ -88,10 +86,14 @@ pub async fn handle(
             }
         }
         PrCommands::View { id, web, comments } => {
-            let (workspace, repo) = resolve_repo_info(repo_override, remote_override)?;
+            let (workspace, repo) =
+                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
 
-            let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
-            let pr = client.get_pull_request(&workspace, &repo, pr_id).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
+            let pr = ctx
+                .client
+                .get_pull_request(&workspace, &repo, pr_id)
+                .await?;
 
             if web {
                 open::that(pr.links.html.href)?;
@@ -99,9 +101,9 @@ pub async fn handle(
                 return Ok(());
             }
 
-            let pr_comments = if comments || json {
+            let pr_comments = if comments || ctx.json {
                 Some(
-                    client
+                    ctx.client
                         .get_pull_request_comments(&workspace, &repo, pr_id)
                         .await?,
                 )
@@ -109,7 +111,7 @@ pub async fn handle(
                 None
             };
 
-            if json {
+            if ctx.json {
                 #[derive(serde::Serialize)]
                 struct JsonOutput {
                     pr: crate::api::models::PullRequest,
@@ -127,7 +129,7 @@ pub async fn handle(
 
             // Fetch build statuses
             let statuses = if let Some(commit) = &pr.source.commit {
-                client
+                ctx.client
                     .get_commit_statuses(&workspace, &repo, &commit.hash)
                     .await?
             } else {
@@ -142,20 +144,25 @@ pub async fn handle(
             }
         }
         PrCommands::Diff { id, name_only, web } => {
-            let (workspace, repo) = resolve_repo_info(repo_override, remote_override)?;
+            let (workspace, repo) =
+                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
 
-            let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
 
             // Handle --web flag (open in browser)
             if web {
-                let pr = client.get_pull_request(&workspace, &repo, pr_id).await?;
+                let pr = ctx
+                    .client
+                    .get_pull_request(&workspace, &repo, pr_id)
+                    .await?;
                 let diff_url = format!("{}/diff", pr.links.html.href);
                 open::that(diff_url)?;
                 ui::success(&format!("Opened PR #{} diff in browser", pr_id));
                 return Ok(());
             }
 
-            let diff = client
+            let diff = ctx
+                .client
                 .get_pull_request_diff(&workspace, &repo, pr_id)
                 .await?;
 
@@ -170,11 +177,13 @@ pub async fn handle(
             }
         }
         PrCommands::Comments { id } => {
-            let (workspace, repo) = resolve_repo_info(repo_override, remote_override)?;
+            let (workspace, repo) =
+                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
 
-            let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
 
-            let comments = client
+            let comments = ctx
+                .client
                 .get_pull_request_comments(&workspace, &repo, pr_id)
                 .await?;
 
@@ -183,7 +192,7 @@ pub async fn handle(
                 return Ok(());
             }
 
-            if json {
+            if ctx.json {
                 ui::print_json(&comments)?;
             } else {
                 pr_display::print_comments(&comments);

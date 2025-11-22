@@ -3,7 +3,7 @@ use clap::{Args, Subcommand};
 use std::io::{self, Write};
 
 use crate::api::models::User;
-use crate::config::manager::ProfileConfig;
+use crate::config::manager::Profile;
 use crate::display::ui;
 
 #[derive(Args)]
@@ -23,7 +23,7 @@ pub enum AuthCommands {
 }
 
 /// Check if user is authenticated by verifying credentials and API access
-async fn get_authenticated_user(profile: Option<&ProfileConfig>) -> Result<User> {
+async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
     let username = profile
         .and_then(|p| p.user.as_ref())
         .ok_or_else(|| anyhow!("No user configured in active profile"))?;
@@ -45,11 +45,7 @@ async fn get_authenticated_user(profile: Option<&ProfileConfig>) -> Result<User>
 }
 
 /// Attempt to log in with provided credentials
-async fn check_login(
-    profile: Option<&ProfileConfig>,
-    username: &str,
-    password: &str,
-) -> Result<User> {
+async fn check_login(profile: Option<&Profile>, username: &str, password: &str) -> Result<User> {
     let base_url = profile
         .and_then(|p| p.api_url.clone())
         .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
@@ -81,7 +77,9 @@ mod messages;
 use messages::auth as msg;
 
 // TODO: Improve view layer of this command.
-pub async fn handle(args: AuthArgs) -> Result<()> {
+use crate::context::AppContext;
+
+pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
     match args.command {
         AuthCommands::Login => {
             print!("Email: ");
@@ -108,7 +106,7 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
 
             ui::info(msg::VERIFYING_CREDENTIALS);
 
-            let config = crate::config::manager::AppConfig::load().ok();
+            let config = crate::config::manager::ProfileConfig::load().ok();
             let profile = config.as_ref().and_then(|c| c.get_active_profile());
 
             match check_login(profile, username, &password).await {
@@ -130,7 +128,7 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
             }
         }
         AuthCommands::Logout => {
-            let config = crate::config::manager::AppConfig::load().ok();
+            let config = crate::config::manager::ProfileConfig::load().ok();
             let default_user = config.as_ref().and_then(|c| c.get_default_user());
 
             let username = if let Some(user) = default_user.as_ref() {
@@ -158,7 +156,7 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
         AuthCommands::Status => {
             ui::info(msg::CHECKING_STATUS);
 
-            let config = crate::config::manager::AppConfig::load()?;
+            let config = crate::config::manager::ProfileConfig::load()?;
             let profile = config.get_active_profile();
 
             match get_authenticated_user(profile).await {

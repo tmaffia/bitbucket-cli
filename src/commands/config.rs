@@ -22,7 +22,9 @@ pub enum ConfigCommands {
     Get { key: Option<String> },
 }
 
-pub async fn handle(args: ConfigArgs) -> Result<()> {
+use crate::context::AppContext;
+
+pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
     match args.command {
         ConfigCommands::Init => {
             ui::info("Initializing config...");
@@ -81,7 +83,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
             }
         }
         ConfigCommands::List => {
-            let config = crate::config::manager::AppConfig::load()?;
+            let config = crate::config::manager::ProfileConfig::load()?;
             println!("{:#?}", config);
         }
         ConfigCommands::Set { key, value } => {
@@ -89,7 +91,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
             ui::success(&format!("Set {} = {}", key, value));
         }
         ConfigCommands::Get { key } => {
-            let config = crate::config::manager::AppConfig::load()?;
+            let config = crate::config::manager::ProfileConfig::load()?;
 
             // If no key provided, show full config
             if key.is_none() || key.as_ref().map_or(true, |s| s.is_empty()) {

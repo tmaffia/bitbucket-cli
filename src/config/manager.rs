@@ -4,13 +4,13 @@ use dirs;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct AppConfig {
+pub struct ProfileConfig {
     pub default_profile: Option<String>,
     #[serde(rename = "profile")]
-    pub profiles: Option<std::collections::HashMap<String, ProfileConfig>>,
+    pub profiles: Option<std::collections::HashMap<String, Profile>>,
 }
 
-impl Default for AppConfig {
+impl Default for ProfileConfig {
     fn default() -> Self {
         Self {
             default_profile: None,
@@ -20,7 +20,7 @@ impl Default for AppConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct ProfileConfig {
+pub struct Profile {
     pub workspace: String,
     pub user: Option<String>,
     pub repository: Option<String>,
@@ -29,22 +29,63 @@ pub struct ProfileConfig {
     pub remote: Option<String>,
 }
 
-impl AppConfig {
+impl ProfileConfig {
     pub fn load() -> Result<Self> {
         let config = build_config()?;
-        let app_config: AppConfig = config
+        let app_config: ProfileConfig = config
             .try_deserialize()
             .context("Failed to deserialize configuration")?;
         Ok(app_config)
     }
 
-    pub fn get_active_profile(&self) -> Option<&ProfileConfig> {
+    pub fn get_active_profile(&self) -> Option<&Profile> {
         let profile_name = self.default_profile.as_deref().unwrap_or("default");
         self.profiles.as_ref().and_then(|p| p.get(profile_name))
     }
 
     pub fn get_default_user(&self) -> Option<String> {
         self.get_active_profile().and_then(|p| p.user.clone())
+    }
+
+    pub fn create_client(
+        &self,
+        profile_override: Option<&str>,
+    ) -> Result<crate::api::client::BitbucketClient> {
+        let profile_name = profile_override
+            .or(self.default_profile.as_deref())
+            .unwrap_or("default");
+
+        let profile = self.profiles.as_ref().and_then(|p| p.get(profile_name));
+
+        if let Some(p) = profile {
+            crate::utils::debug::log(&format!("Profile loaded. User: {:?}", p.user));
+        } else {
+            crate::utils::debug::log(&format!("Profile '{}' NOT found in config.", profile_name));
+        }
+
+        let base_url = profile
+            .and_then(|p| p.api_url.clone())
+            .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
+
+        let mut auth = None;
+        if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
+            match crate::utils::auth::get_credentials(username) {
+                Ok(password) => {
+                    crate::utils::debug::log(&format!("Credentials found for user '{}'", username));
+                    auth = Some((username.clone(), password));
+                }
+                Err(e) => {
+                    crate::utils::debug::log(&format!(
+                        "Failed to load credentials for user '{}': {}",
+                        username, e
+                    ));
+                }
+            }
+        } else {
+            crate::utils::debug::log("No user configured in profile. Running unauthenticated.");
+        }
+
+        crate::api::client::BitbucketClient::new(base_url, auth)
     }
 }
 
@@ -97,10 +138,6 @@ pub fn get_config_dir() -> Option<std::path::PathBuf> {
     {
         dirs::config_dir()
     }
-}
-
-pub fn update_global_user(username: &str) -> Result<()> {
-    set_config_value("profile.default.user", username)
 }
 
 pub fn set_config_value(key: &str, value: &str) -> Result<()> {
@@ -198,7 +235,7 @@ mod tests {
         let mut profiles = HashMap::new();
         profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 workspace: "ws".to_string(),
                 user: Some("default_user".to_string()),
                 repository: None,
@@ -208,7 +245,7 @@ mod tests {
             },
         );
 
-        let config = AppConfig {
+        let config = ProfileConfig {
             default_profile: None,
             profiles: Some(profiles),
         };
@@ -224,7 +261,7 @@ mod tests {
         let mut profiles = HashMap::new();
         profiles.insert(
             "custom".to_string(),
-            ProfileConfig {
+            Profile {
                 workspace: "custom_ws".to_string(),
                 user: Some("custom_user".to_string()),
                 repository: None,
@@ -234,7 +271,7 @@ mod tests {
             },
         );
 
-        let config = AppConfig {
+        let config = ProfileConfig {
             default_profile: Some("custom".to_string()),
             profiles: Some(profiles),
         };
@@ -249,7 +286,7 @@ mod tests {
         let mut profiles = HashMap::new();
         profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 workspace: "ws".to_string(),
                 user: Some("test_user".to_string()),
                 repository: None,
@@ -259,7 +296,7 @@ mod tests {
             },
         );
 
-        let config = AppConfig {
+        let config = ProfileConfig {
             default_profile: None,
             profiles: Some(profiles),
         };
@@ -273,7 +310,7 @@ mod tests {
         let mut profiles = HashMap::new();
         profiles.insert(
             "default".to_string(),
-            ProfileConfig {
+            Profile {
                 workspace: "ws".to_string(),
                 user: None,
                 repository: None,
@@ -283,7 +320,7 @@ mod tests {
             },
         );
 
-        let config = AppConfig {
+        let config = ProfileConfig {
             default_profile: None,
             profiles: Some(profiles),
         };

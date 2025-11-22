@@ -98,11 +98,6 @@ pub fn print_comments(comments: &[Comment]) {
     }
 }
 
-pub fn print_pr_list(prs: &[PullRequest]) {
-    let output = format_pr_list(prs);
-    println!("{}", output);
-}
-
 pub fn format_pr_list(prs: &[PullRequest]) -> String {
     let headers = vec!["ID", "Title", "Author", "Source", "State", "Updated"];
     let rows: Vec<Vec<Cell>> = prs
