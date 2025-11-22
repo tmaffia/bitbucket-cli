@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::style::{Color, Stylize};
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::process::{Command, Stdio};
 
 /// Display a diff with color formatting and optional paging
@@ -75,7 +75,7 @@ fn format_colored_diff(diff_text: &str) -> String {
 /// Check if we should use a pager (only if output is to a TTY)
 fn should_use_pager() -> bool {
     // Check if stdout is a terminal
-    atty::is(atty::Stream::Stdout)
+    std::io::stdout().is_terminal()
 }
 
 /// Display content in a pager (less -R by default)

@@ -1,6 +1,6 @@
 use crate::config::manager::ProfileConfig;
 use anyhow::{Context, Result};
-use reqwest::Client;
+use reqwest::{Client, Method, RequestBuilder};
 use serde::de::DeserializeOwned;
 
 pub struct BitbucketClient {
@@ -53,15 +53,29 @@ impl BitbucketClient {
         })
     }
 
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let url = format!("{}{}", self.base_url, path);
-        let mut request = self.client.get(&url);
+    fn build_request(&self, method: Method, path: &str) -> RequestBuilder {
+        // Ensure we don't double-slash or miss a slash
+        let url = format!(
+            "{}/{}",
+            self.base_url.trim_end_matches('/'),
+            path.trim_start_matches('/')
+        );
+
+        let mut request = self.client.request(method, &url);
 
         if let Some((username, password)) = &self.auth_header {
             request = request.basic_auth(username, Some(password));
         }
 
-        let response = request.send().await.context("Failed to send request")?;
+        request
+    }
+
+    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let response = self
+            .build_request(Method::GET, path)
+            .send()
+            .await
+            .context("Failed to send request")?;
 
         if !response.status().is_success() {
             // TODO: Better error handling
@@ -110,14 +124,11 @@ impl BitbucketClient {
             "/repositories/{}/{}/pullrequests/{}/diff",
             workspace, repo, id
         );
-        let url = format!("{}{}", self.base_url, path);
-        let mut request = self.client.get(&url);
-
-        if let Some((username, password)) = &self.auth_header {
-            request = request.basic_auth(username, Some(password));
-        }
-
-        let response = request.send().await.context("Failed to send request")?;
+        let response = self
+            .build_request(Method::GET, &path)
+            .send()
+            .await
+            .context("Failed to send request")?;
 
         if !response.status().is_success() {
             return Err(anyhow::anyhow!("API request failed: {}", response.status()));
