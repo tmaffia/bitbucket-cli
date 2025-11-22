@@ -19,15 +19,16 @@ pub fn get_current_branch() -> Result<String> {
     Ok(branch)
 }
 
-pub fn get_repo_info() -> Result<(String, String)> {
-    // Get remote URL (assume 'origin' for now)
+pub fn get_repo_info(remote_name: Option<&str>) -> Result<(String, String)> {
+    let remote = remote_name.unwrap_or("origin");
+    // Get remote URL
     let output = Command::new("git")
-        .args(&["remote", "get-url", "origin"])
+        .args(&["remote", "get-url", remote])
         .output()
         .context("Failed to execute git command")?;
 
     if !output.status.success() {
-        return Err(anyhow::anyhow!("No remote 'origin' found"));
+        return Err(anyhow::anyhow!("No remote '{}' found", remote));
     }
 
     let url_str = String::from_utf8(output.stdout)

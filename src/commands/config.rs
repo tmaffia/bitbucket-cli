@@ -46,14 +46,26 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
             io::stdin().read_line(&mut input)?;
             let repo = input.trim().to_string();
 
+            input.clear();
+            print!("Default remote [origin]: ");
+            io::stdout().flush()?;
+            io::stdin().read_line(&mut input)?;
+            let input_remote = input.trim().to_string();
+            let remote = if input_remote.is_empty() {
+                "origin".to_string()
+            } else {
+                input_remote
+            };
+
             if local_init {
-                crate::config::manager::init_local_config(&workspace, &repo)?;
+                crate::config::manager::init_local_config(&workspace, &repo, &remote)?;
                 ui::success("Local configuration initialized");
             } else {
                 crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
                 if !repo.is_empty() {
                     crate::config::manager::set_config_value("profile.default.repository", &repo)?;
                 }
+                crate::config::manager::set_config_value("profile.default.remote", &remote)?;
 
                 input.clear();
                 print!("Default user email (optional): ");
@@ -103,11 +115,14 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
                 "output_format" => config
                     .get_active_profile()
                     .and_then(|p| p.output_format.as_ref().map(|s| s.as_str())),
+                "remote" => config
+                    .get_active_profile()
+                    .and_then(|p| p.remote.as_ref().map(|s| s.as_str())),
 
                 _ => {
                     ui::error(&format!("Unknown key: '{}'", key));
                     ui::info(
-                        "Valid keys: default_profile, workspace, user, repository, api_url, output_format",
+                        "Valid keys: default_profile, workspace, user, repository, api_url, output_format, remote",
                     );
                     return Ok(());
                 }

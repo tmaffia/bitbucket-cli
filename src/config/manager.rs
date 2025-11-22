@@ -17,6 +17,7 @@ pub struct ProfileConfig {
     pub repository: Option<String>,
     pub api_url: Option<String>,
     pub output_format: Option<String>,
+    pub remote: Option<String>,
 }
 
 impl AppConfig {
@@ -141,7 +142,7 @@ pub fn set_config_value(key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn init_local_config(workspace: &str, repo: &str) -> Result<()> {
+pub fn init_local_config(workspace: &str, repo: &str, remote: &str) -> Result<()> {
     let current_dir = std::env::current_dir().context("Failed to get current directory")?;
     let config_path = current_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME);
 
@@ -163,6 +164,10 @@ pub fn init_local_config(workspace: &str, repo: &str) -> Result<()> {
     profile_default.insert(
         "repository",
         toml_edit::Item::Value(toml_edit::Value::from(repo)),
+    );
+    profile_default.insert(
+        "remote",
+        toml_edit::Item::Value(toml_edit::Value::from(remote)),
     );
 
     let mut profile = toml_edit::Table::new();
