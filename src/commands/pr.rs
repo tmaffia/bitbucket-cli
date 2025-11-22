@@ -198,38 +198,50 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
     Ok(())
 }
 
-/// Resolve repository information from overrides or git configuration
+/// Resolve repository information from overrides, git configuration, or config file
 ///
-/// # Arguments
-///
-/// * `repo_override` - Optional "workspace/repo" string
-/// * `remote_override` - Optional git remote name
+/// Tries in order:
+/// 1. Explicit CLI override (`--repo workspace/repo`)
+/// 2. Git remote detection
+/// 3. Config file default repository
 fn resolve_repo_info(ctx: &AppContext) -> Result<(String, String)> {
-    if let Some(r) = &ctx.repo_override {
-        let parts: Vec<&str> = r.split('/').collect();
-        if parts.len() != 2 {
-            return Err(anyhow::anyhow!(
-                "Invalid repo format. Expected workspace/repo"
-            ));
+    resolve_from_override(ctx)
+        .or_else(|| resolve_from_git(ctx))
+        .or_else(|| resolve_from_config(ctx))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Could not determine repository. Use --repo or configure a default repository."
+            )
+        })
+}
+
+/// Try to resolve repository info from CLI override
+fn resolve_from_override(ctx: &AppContext) -> Option<(String, String)> {
+    ctx.repo_override.as_ref().and_then(|r| {
+        let parts: Vec<_> = r.split('/').collect();
+        if parts.len() == 2 {
+            Some((parts[0].to_string(), parts[1].to_string()))
+        } else {
+            // Invalid format - should we warn here?
+            // For now, return None to allow fallback to other methods
+            None
         }
-        Ok((parts[0].to_string(), parts[1].to_string()))
-    } else {
-        // Try to get from git
-        match crate::git::get_repo_info(ctx.remote_override.as_deref()) {
-            Ok(info) => Ok(info),
-            Err(_) => {
-                // Fallback to config
-                if let Some(profile) = ctx.config.get_active_profile() {
-                    if let Some(r) = &profile.repository {
-                        return Ok((profile.workspace.clone(), r.clone()));
-                    }
-                }
-                // If git failed and config didn't have it, return the git error or a generic one
-                // Re-run git to get the error if needed, or just return a new error
-                crate::git::get_repo_info(ctx.remote_override.as_deref())
-            }
-        }
-    }
+    })
+}
+
+/// Try to resolve repository info from git remote
+fn resolve_from_git(ctx: &AppContext) -> Option<(String, String)> {
+    crate::git::get_repo_info(ctx.remote_override.as_deref()).ok()
+}
+
+/// Try to resolve repository info from config file
+fn resolve_from_config(ctx: &AppContext) -> Option<(String, String)> {
+    ctx.config.get_active_profile().and_then(|profile| {
+        profile
+            .repository
+            .as_ref()
+            .map(|r| (profile.workspace.clone(), r.clone()))
+    })
 }
 
 /// Resolve Pull Request ID from argument or current branch
@@ -256,5 +268,193 @@ async fn resolve_pr_id(
     match pr {
         Some(p) => Ok(p.id),
         None => Err(anyhow::anyhow!("No open PR found for branch '{}'", branch)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::manager::{Profile, ProfileConfig};
+    use std::collections::HashMap;
+
+    fn create_test_context(
+        repo_override: Option<String>,
+        remote_override: Option<String>,
+        config_workspace: Option<String>,
+        config_repo: Option<String>,
+    ) -> AppContext {
+        let mut profiles = HashMap::new();
+
+        if let (Some(ws), Some(repo)) = (config_workspace, config_repo) {
+            profiles.insert(
+                "default".to_string(),
+                Profile {
+                    workspace: ws,
+                    user: None,
+                    repository: Some(repo),
+                    api_url: None,
+                    output_format: None,
+                    remote: None,
+                },
+            );
+        }
+
+        let config = ProfileConfig {
+            default_profile: None,
+            profiles: if profiles.is_empty() {
+                None
+            } else {
+                Some(profiles)
+            },
+        };
+
+        // Create a dummy client - we won't use it in these tests
+        let client = crate::api::client::BitbucketClient::new(
+            "https://api.bitbucket.org/2.0".to_string(),
+            None,
+        )
+        .unwrap();
+
+        AppContext {
+            config,
+            client,
+            repo_override,
+            remote_override,
+            json: false,
+        }
+    }
+
+    #[test]
+    fn test_resolve_from_override_valid() {
+        let ctx = create_test_context(Some("myworkspace/myrepo".to_string()), None, None, None);
+
+        let result = resolve_from_override(&ctx);
+        assert_eq!(
+            result,
+            Some(("myworkspace".to_string(), "myrepo".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_resolve_from_override_invalid_format() {
+        let ctx = create_test_context(Some("invalid-format".to_string()), None, None, None);
+
+        let result = resolve_from_override(&ctx);
+        // Should return None to allow fallback, not error
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_from_override_too_many_slashes() {
+        let ctx = create_test_context(Some("workspace/repo/extra".to_string()), None, None, None);
+
+        let result = resolve_from_override(&ctx);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_from_override_none() {
+        let ctx = create_test_context(None, None, None, None);
+
+        let result = resolve_from_override(&ctx);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_from_config_valid() {
+        let ctx = create_test_context(
+            None,
+            None,
+            Some("config-workspace".to_string()),
+            Some("config-repo".to_string()),
+        );
+
+        let result = resolve_from_config(&ctx);
+        assert_eq!(
+            result,
+            Some(("config-workspace".to_string(), "config-repo".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_resolve_from_config_no_repository() {
+        let ctx = create_test_context(None, None, Some("workspace".to_string()), None);
+
+        let result = resolve_from_config(&ctx);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_from_config_no_profile() {
+        let ctx = create_test_context(None, None, None, None);
+
+        let result = resolve_from_config(&ctx);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_repo_info_from_override() {
+        let ctx = create_test_context(
+            Some("override-ws/override-repo".to_string()),
+            None,
+            Some("config-ws".to_string()),
+            Some("config-repo".to_string()),
+        );
+
+        // Override should take precedence
+        let result = resolve_repo_info(&ctx);
+        assert!(result.is_ok());
+        let (ws, repo) = result.unwrap();
+        assert_eq!(ws, "override-ws");
+        assert_eq!(repo, "override-repo");
+    }
+
+    #[test]
+    fn test_resolve_repo_info_from_config() {
+        let ctx = create_test_context(
+            None,
+            None,
+            Some("config-ws".to_string()),
+            Some("config-repo".to_string()),
+        );
+
+        // Should fall through to config since no override or git
+        let result = resolve_repo_info(&ctx);
+        assert!(result.is_ok());
+        let (ws, repo) = result.unwrap();
+        assert_eq!(ws, "config-ws");
+        assert_eq!(repo, "config-repo");
+    }
+
+    #[test]
+    fn test_resolve_repo_info_invalid_override_fallback_to_config() {
+        let ctx = create_test_context(
+            Some("invalid-format".to_string()),
+            None,
+            Some("config-ws".to_string()),
+            Some("config-repo".to_string()),
+        );
+
+        // Invalid override should fall back to config
+        let result = resolve_repo_info(&ctx);
+        assert!(result.is_ok());
+        let (ws, repo) = result.unwrap();
+        assert_eq!(ws, "config-ws");
+        assert_eq!(repo, "config-repo");
+    }
+
+    #[test]
+    fn test_resolve_repo_info_no_sources_fails() {
+        let ctx = create_test_context(None, None, None, None);
+
+        // No sources available, should error
+        let result = resolve_repo_info(&ctx);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Could not determine repository")
+        );
     }
 }
