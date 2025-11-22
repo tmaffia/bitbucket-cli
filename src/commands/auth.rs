@@ -83,7 +83,11 @@ pub async fn handle(args: AuthArgs) -> Result<()> {
                 return Ok(());
             }
 
-            let password = rpassword::prompt_password("App Password: ")?;
+            print!("App Password: ");
+            io::stdout().flush()?;
+            let mut password = String::new();
+            io::stdin().read_line(&mut password)?;
+            let password = password.trim();
 
             if password.is_empty() {
                 ui::error("App Password cannot be empty");

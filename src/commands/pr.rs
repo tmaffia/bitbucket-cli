@@ -32,6 +32,12 @@ pub enum PrCommands {
     Diff {
         /// PR ID (optional, infers from branch if missing)
         id: Option<u32>,
+        /// Display only names of changed files
+        #[arg(long)]
+        name_only: bool,
+        /// Open the pull request diff in the browser
+        #[arg(long, short = 'w')]
+        web: bool,
     },
     /// Show comments
     Comments {
@@ -152,7 +158,7 @@ pub async fn handle(
                 pr_display::print_comments(&comments_list);
             }
         }
-        PrCommands::Diff { id } => {
+        PrCommands::Diff { id, name_only, web } => {
             let (workspace, repo) = if let Some(r) = repo_override {
                 let parts: Vec<&str> = r.split('/').collect();
                 if parts.len() != 2 {
@@ -167,10 +173,28 @@ pub async fn handle(
 
             let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
 
+            // Handle --web flag (open in browser)
+            if web {
+                let pr = client.get_pull_request(&workspace, &repo, pr_id).await?;
+                let diff_url = format!("{}/diff", pr.links.html.href);
+                open::that(diff_url)?;
+                ui::success(&format!("Opened PR #{} diff in browser", pr_id));
+                return Ok(());
+            }
+
             let diff = client
                 .get_pull_request_diff(&workspace, &repo, pr_id)
                 .await?;
-            println!("{}", diff);
+
+            // Handle --name-only flag
+            if name_only {
+                crate::display::diff::print_filenames_only(&diff);
+            } else {
+                // TODO: Add support for filtering (--exclude, --exclude-lockfiles, path patterns)
+                // TODO: Add support for collapsing large diffs (--collapse-large)
+                // TODO: Add --stat flag for git-style statistics
+                crate::display::diff::print_diff(&diff)?;
+            }
         }
         PrCommands::Comments { id } => {
             let (workspace, repo) = if let Some(r) = repo_override {
