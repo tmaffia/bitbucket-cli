@@ -118,7 +118,7 @@ impl BitbucketClient {
             all_prs.extend(response.values);
 
             // Check if we've reached the limit
-            let limit_reached = limit.map_or(false, |max| all_prs.len() >= max as usize);
+            let limit_reached = limit.is_some_and(|max| all_prs.len() >= max as usize);
 
             if limit_reached {
                 all_prs.truncate(limit.unwrap() as usize);

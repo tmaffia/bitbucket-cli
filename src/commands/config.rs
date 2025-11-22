@@ -94,7 +94,7 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
             let config = crate::config::manager::ProfileConfig::load()?;
 
             // If no key provided, show full config
-            if key.is_none() || key.as_ref().map_or(true, |s| s.is_empty()) {
+            if key.is_none() || key.as_ref().is_none_or(|s| s.is_empty()) {
                 println!("{:#?}", config);
                 return Ok(());
             }
@@ -103,23 +103,21 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
 
             // Match on the key to access the appropriate field
             let value = match key.as_str() {
-                "default_profile" => config.default_profile.as_ref().map(|s| s.as_str()),
+                "default_profile" => config.default_profile.as_deref(),
                 "workspace" => config.get_active_profile().map(|p| p.workspace.as_str()),
-                "user" => config
-                    .get_active_profile()
-                    .and_then(|p| p.user.as_ref().map(|s| s.as_str())),
+                "user" => config.get_active_profile().and_then(|p| p.user.as_deref()),
                 "repository" => config
                     .get_active_profile()
-                    .and_then(|p| p.repository.as_ref().map(|s| s.as_str())),
+                    .and_then(|p| p.repository.as_deref()),
                 "api_url" => config
                     .get_active_profile()
-                    .and_then(|p| p.api_url.as_ref().map(|s| s.as_str())),
+                    .and_then(|p| p.api_url.as_deref()),
                 "output_format" => config
                     .get_active_profile()
-                    .and_then(|p| p.output_format.as_ref().map(|s| s.as_str())),
+                    .and_then(|p| p.output_format.as_deref()),
                 "remote" => config
                     .get_active_profile()
-                    .and_then(|p| p.remote.as_ref().map(|s| s.as_str())),
+                    .and_then(|p| p.remote.as_deref()),
 
                 _ => {
                     ui::error(&format!("Unknown key: '{}'", key));

@@ -3,20 +3,11 @@ use config::{Config, FileFormat};
 use dirs;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct ProfileConfig {
     pub default_profile: Option<String>,
     #[serde(rename = "profile")]
     pub profiles: Option<std::collections::HashMap<String, Profile>>,
-}
-
-impl Default for ProfileConfig {
-    fn default() -> Self {
-        Self {
-            default_profile: None,
-            profiles: None,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
