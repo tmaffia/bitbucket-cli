@@ -111,12 +111,13 @@ impl BitbucketClient {
             workspace, repo, id
         );
         let url = format!("{}{}", self.base_url, path);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .context("Failed to send request")?;
+        let mut request = self.client.get(&url);
+
+        if let Some((username, password)) = &self.auth_header {
+            request = request.basic_auth(username, Some(password));
+        }
+
+        let response = request.send().await.context("Failed to send request")?;
 
         if !response.status().is_success() {
             return Err(anyhow::anyhow!("API request failed: {}", response.status()));
@@ -124,6 +125,21 @@ impl BitbucketClient {
 
         let text = response.text().await.context("Failed to get diff text")?;
         Ok(text)
+    }
+
+    pub async fn get_commit_statuses(
+        &self,
+        workspace: &str,
+        repo: &str,
+        commit_hash: &str,
+    ) -> Result<Vec<crate::api::models::CommitStatus>> {
+        let path = format!(
+            "/repositories/{}/{}/commit/{}/statuses",
+            workspace, repo, commit_hash
+        );
+        let response: crate::api::models::PaginatedResponse<crate::api::models::CommitStatus> =
+            self.get(&path).await?;
+        Ok(response.values)
     }
 
     pub async fn get_pull_request_comments(

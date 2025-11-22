@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
-use crate::utils::display;
+use crate::display::{pr as pr_display, ui};
 
 #[derive(Args)]
 pub struct PrArgs {
@@ -24,6 +24,9 @@ pub enum PrCommands {
         /// Open in browser
         #[arg(long)]
         web: bool,
+        /// Show comments
+        #[arg(long)]
+        comments: bool,
     },
     /// Show diff
     Diff {
@@ -42,6 +45,7 @@ use crate::api::client::BitbucketClient;
 pub async fn handle(
     args: PrArgs,
     repo_override: Option<String>,
+    json: bool,
     client: &BitbucketClient,
 ) -> Result<()> {
     match args.command {
@@ -61,7 +65,7 @@ pub async fn handle(
             let prs = client.list_pull_requests(&workspace, &repo, &state).await?;
 
             if prs.is_empty() {
-                display::info(&format!(
+                ui::info(&format!(
                     "No pull requests found in {}/{} with state {}",
                     workspace, repo, state
                 ));
@@ -84,7 +88,7 @@ pub async fn handle(
 
             println!("{}", table);
         }
-        PrCommands::View { id, web } => {
+        PrCommands::View { id, web, comments } => {
             let (workspace, repo) = if let Some(r) = repo_override {
                 let parts: Vec<&str> = r.split('/').collect();
                 if parts.len() != 2 {
@@ -98,21 +102,54 @@ pub async fn handle(
             };
 
             let pr_id = resolve_pr_id(id, client, &workspace, &repo).await?;
-
             let pr = client.get_pull_request(&workspace, &repo, pr_id).await?;
 
             if web {
                 open::that(pr.links.html.href)?;
-                display::success(&format!("Opened PR #{} in browser", pr.id));
+                ui::success(&format!("Opened PR #{} in browser", pr.id));
+                return Ok(());
+            }
+
+            let pr_comments = if comments || json {
+                Some(
+                    client
+                        .get_pull_request_comments(&workspace, &repo, pr_id)
+                        .await?,
+                )
             } else {
-                println!("PR #{} - {}", pr.id, pr.title);
-                println!("State: {}", pr.state);
-                println!("Author: {}", pr.author.display_name);
-                println!("Source: {}", pr.source.branch.name);
-                println!("Link: {}", pr.links.html.href);
-                if let Some(desc) = pr.description {
-                    println!("\n{}", desc);
+                None
+            };
+
+            if json {
+                #[derive(serde::Serialize)]
+                struct JsonOutput {
+                    pr: crate::api::models::PullRequest,
+                    comments: Option<Vec<crate::api::models::Comment>>,
                 }
+
+                let output = JsonOutput {
+                    pr,
+                    comments: pr_comments,
+                };
+
+                ui::print_json(&output)?;
+                return Ok(());
+            }
+
+            // Fetch build statuses
+            let statuses = if let Some(commit) = &pr.source.commit {
+                client
+                    .get_commit_statuses(&workspace, &repo, &commit.hash)
+                    .await?
+            } else {
+                Vec::new()
+            };
+
+            pr_display::print_pr_details(&pr, &statuses);
+
+            // Display Comments
+            if let Some(comments_list) = pr_comments {
+                pr_display::print_comments(&comments_list);
             }
         }
         PrCommands::Diff { id } => {
@@ -155,24 +192,11 @@ pub async fn handle(
                 .await?;
 
             if comments.is_empty() {
-                display::info(&format!("No comments found for PR #{}", pr_id));
+                ui::info(&format!("No comments found for PR #{}", pr_id));
                 return Ok(());
             }
 
-            for comment in comments {
-                println!("--------------------------------------------------");
-                println!(
-                    "Author: {} ({})",
-                    comment.user.display_name, comment.created_on
-                );
-                if let Some(inline) = comment.inline {
-                    println!("File: {}", inline.path);
-                    if let Some(line) = inline.to.or(inline.from) {
-                        println!("Line: {}", line);
-                    }
-                }
-                println!("\n{}", comment.content.raw);
-            }
+            pr_display::print_comments(&comments);
         }
     }
     Ok(())

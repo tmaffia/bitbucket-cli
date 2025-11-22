@@ -5,6 +5,7 @@ mod api;
 mod commands;
 mod config;
 mod constants;
+mod display;
 mod git;
 mod utils;
 
@@ -29,6 +30,10 @@ struct Cli {
     /// Override repository (format: workspace/repo)
     #[arg(short = 'R', long, global = true)]
     repo: Option<String>,
+
+    /// Output as JSON
+    #[arg(long, global = true)]
+    json: bool,
 }
 
 #[derive(Subcommand)]
@@ -50,7 +55,7 @@ async fn main() {
         Ok(c) => c,
         Err(e) => {
             if !cli.quiet {
-                utils::display::warning(&format!("Failed to load config: {}", e));
+                display::ui::warning(&format!("Failed to load config: {}", e));
             }
             // Return empty config or default
             config::manager::AppConfig {
@@ -71,19 +76,19 @@ async fn main() {
     let client = match api::client::BitbucketClient::new(profile, None) {
         Ok(c) => c,
         Err(e) => {
-            utils::display::error(&format!("Error initializing client: {}", e));
+            display::ui::error(&format!("Error initializing client: {}", e));
             process::exit(1);
         }
     };
 
     let result = match cli.command {
-        Commands::Pr(args) => commands::pr::handle(args, cli.repo, &client).await,
+        Commands::Pr(args) => commands::pr::handle(args, cli.repo, cli.json, &client).await,
         Commands::Auth(args) => commands::auth::handle(args).await,
         Commands::Config(args) => commands::config::handle(args).await,
     };
 
     if let Err(e) = result {
-        utils::display::error(&format!("{:#}", e));
+        display::ui::error(&format!("{:#}", e));
         process::exit(1);
     }
 }

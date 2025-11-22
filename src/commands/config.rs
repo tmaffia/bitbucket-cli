@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use std::io::{self, Write};
 
-use crate::utils::display;
+use crate::display::ui;
 
 #[derive(Args)]
 pub struct ConfigArgs {
@@ -25,7 +25,7 @@ pub enum ConfigCommands {
 pub async fn handle(args: ConfigArgs) -> Result<()> {
     match args.command {
         ConfigCommands::Init => {
-            display::info("Initializing config...");
+            ui::info("Initializing config...");
             // Interactive setup
             let mut input = String::new();
 
@@ -48,7 +48,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
 
             if local_init {
                 crate::config::manager::init_local_config(&workspace, &repo)?;
-                display::success("Local configuration initialized");
+                ui::success("Local configuration initialized");
             } else {
                 crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
                 if !repo.is_empty() {
@@ -65,7 +65,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
                     crate::config::manager::set_config_value("profile.default.user", &user)?;
                 }
 
-                display::success("Configuration initialized");
+                ui::success("Configuration initialized");
             }
         }
         ConfigCommands::List => {
@@ -74,7 +74,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
         }
         ConfigCommands::Set { key, value } => {
             crate::config::manager::set_config_value(&key, &value)?;
-            display::success(&format!("Set {} = {}", key, value));
+            ui::success(&format!("Set {} = {}", key, value));
         }
         ConfigCommands::Get { key } => {
             let config = crate::config::manager::AppConfig::load()?;
@@ -105,8 +105,8 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
                     .and_then(|p| p.output_format.as_ref().map(|s| s.as_str())),
 
                 _ => {
-                    display::error(&format!("Unknown key: '{}'", key));
-                    display::info(
+                    ui::error(&format!("Unknown key: '{}'", key));
+                    ui::info(
                         "Valid keys: default_profile, workspace, user, repository, api_url, output_format",
                     );
                     return Ok(());
@@ -115,7 +115,7 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
 
             match value {
                 Some(v) => println!("{}", v),
-                None => display::warning("Key not found or not set"),
+                None => ui::warning("Key not found or not set"),
             }
         }
     }

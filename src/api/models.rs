@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PaginatedResponse<T> {
     pub size: Option<u32>,
     pub page: Option<u32>,
@@ -10,7 +10,7 @@ pub struct PaginatedResponse<T> {
     pub values: Vec<T>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PullRequest {
     pub id: u32,
     pub title: String,
@@ -22,39 +22,42 @@ pub struct PullRequest {
     pub source: Source,
     pub destination: Source,
     pub links: Links,
+    #[serde(default)]
+    pub participants: Vec<Participant>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct User {
     pub display_name: String,
     pub uuid: String,
     pub nickname: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Source {
     pub branch: Branch,
     pub repository: Repository,
+    pub commit: Option<Commit>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Branch {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Repository {
     pub name: String,
     pub full_name: String,
     pub uuid: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Links {
     pub html: Link,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Comment {
     pub id: u32,
     pub content: Content,
@@ -63,20 +66,42 @@ pub struct Comment {
     pub inline: Option<InlineContext>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Content {
     pub raw: String,
     pub html: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct InlineContext {
     pub path: String,
     pub from: Option<u32>,
     pub to: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Link {
     pub href: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Participant {
+    pub role: String,
+    pub user: User,
+    pub approved: bool,
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Commit {
+    pub hash: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CommitStatus {
+    pub key: String,
+    pub state: String,
+    pub name: Option<String>,
+    pub url: String,
+    pub description: Option<String>,
 }
