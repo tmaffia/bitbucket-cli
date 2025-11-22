@@ -78,21 +78,7 @@ pub async fn handle(
                 return Ok(());
             }
 
-            let mut table = comfy_table::Table::new();
-            table.set_header(vec!["ID", "Title", "Author", "Source", "State", "Updated"]);
-
-            for pr in prs {
-                table.add_row(vec![
-                    pr.id.to_string(),
-                    pr.title,
-                    pr.author.display_name,
-                    pr.source.branch.name,
-                    pr.state,
-                    pr.updated_on,
-                ]);
-            }
-
-            println!("{}", table);
+            pr_display::print_pr_list(&prs);
         }
         PrCommands::View { id, web, comments } => {
             let (workspace, repo) = if let Some(r) = repo_override {
@@ -220,7 +206,11 @@ pub async fn handle(
                 return Ok(());
             }
 
-            pr_display::print_comments(&comments);
+            if json {
+                ui::print_json(&comments)?;
+            } else {
+                pr_display::print_comments(&comments);
+            }
         }
     }
     Ok(())
