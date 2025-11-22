@@ -71,21 +71,21 @@ fn check_logout(username: &str) -> Result<()> {
 pub async fn handle(args: AuthArgs) -> Result<()> {
     match args.command {
         AuthCommands::Login => {
-            print!("Username: ");
+            print!("Email: ");
             io::stdout().flush()?;
             let mut username = String::new();
             io::stdin().read_line(&mut username)?;
             let username = username.trim();
 
             if username.is_empty() {
-                display::error("Username cannot be empty");
+                display::error("Email cannot be empty");
                 return Ok(());
             }
 
-            let password = rpassword::prompt_password("Password: ")?;
+            let password = rpassword::prompt_password("App Password: ")?;
 
             if password.is_empty() {
-                display::error("Password cannot be empty");
+                display::error("App Password cannot be empty");
                 return Ok(());
             }
 

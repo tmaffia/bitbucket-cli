@@ -140,3 +140,36 @@ pub fn set_config_value(key: &str, value: &str) -> Result<()> {
     }
     Ok(())
 }
+
+pub fn init_local_config(workspace: &str, repo: &str) -> Result<()> {
+    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+    let config_path = current_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME);
+
+    if config_path.exists() {
+        return Err(anyhow::anyhow!(
+            "Local configuration file already exists at {:?}",
+            config_path
+        ));
+    }
+
+    let mut doc = toml_edit::DocumentMut::new();
+
+    // Create [profile.default]
+    let mut profile_default = toml_edit::Table::new();
+    profile_default.insert(
+        "workspace",
+        toml_edit::Item::Value(toml_edit::Value::from(workspace)),
+    );
+    profile_default.insert(
+        "repository",
+        toml_edit::Item::Value(toml_edit::Value::from(repo)),
+    );
+
+    let mut profile = toml_edit::Table::new();
+    profile.insert("default", toml_edit::Item::Table(profile_default));
+
+    doc.insert("profile", toml_edit::Item::Table(profile));
+
+    std::fs::write(&config_path, doc.to_string())?;
+    Ok(())
+}

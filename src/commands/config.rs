@@ -29,6 +29,12 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
             // Interactive setup
             let mut input = String::new();
 
+            print!("Initialize configuration in current directory? (y/n) [n]: ");
+            io::stdout().flush()?;
+            io::stdin().read_line(&mut input)?;
+            let local_init = input.trim().to_lowercase() == "y";
+
+            input.clear();
             print!("Workspace (e.g., myworkspace): ");
             io::stdout().flush()?;
             io::stdin().read_line(&mut input)?;
@@ -40,22 +46,27 @@ pub async fn handle(args: ConfigArgs) -> Result<()> {
             io::stdin().read_line(&mut input)?;
             let repo = input.trim().to_string();
 
-            crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
-            if !repo.is_empty() {
-                crate::config::manager::set_config_value("profile.default.repository", &repo)?;
+            if local_init {
+                crate::config::manager::init_local_config(&workspace, &repo)?;
+                display::success("Local configuration initialized");
+            } else {
+                crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
+                if !repo.is_empty() {
+                    crate::config::manager::set_config_value("profile.default.repository", &repo)?;
+                }
+
+                input.clear();
+                print!("Default user email (optional): ");
+                io::stdout().flush()?;
+                io::stdin().read_line(&mut input)?;
+                let user = input.trim().to_string();
+
+                if !user.is_empty() {
+                    crate::config::manager::set_config_value("profile.default.user", &user)?;
+                }
+
+                display::success("Configuration initialized");
             }
-
-            input.clear();
-            print!("Default user email (optional): ");
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut input)?;
-            let user = input.trim().to_string();
-
-            if !user.is_empty() {
-                crate::config::manager::set_config_value("profile.default.user", &user)?;
-            }
-
-            display::success("Configuration initialized");
         }
         ConfigCommands::List => {
             let config = crate::config::manager::AppConfig::load()?;
