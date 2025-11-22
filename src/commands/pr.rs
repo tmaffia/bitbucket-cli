@@ -57,8 +57,7 @@ use crate::context::AppContext;
 pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
     match args.command {
         PrCommands::List { state, limit } => {
-            let (workspace, repo) =
-                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
+            let (workspace, repo) = resolve_repo_info(ctx)?;
 
             let prs = ctx
                 .client
@@ -86,8 +85,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::View { id, web, comments } => {
-            let (workspace, repo) =
-                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
+            let (workspace, repo) = resolve_repo_info(ctx)?;
 
             let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
             let pr = ctx
@@ -144,8 +142,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::Diff { id, name_only, web } => {
-            let (workspace, repo) =
-                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
+            let (workspace, repo) = resolve_repo_info(ctx)?;
 
             let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
 
@@ -177,8 +174,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::Comments { id } => {
-            let (workspace, repo) =
-                resolve_repo_info(ctx.repo_override.clone(), ctx.remote_override.clone())?;
+            let (workspace, repo) = resolve_repo_info(ctx)?;
 
             let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
 
@@ -208,11 +204,8 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
 ///
 /// * `repo_override` - Optional "workspace/repo" string
 /// * `remote_override` - Optional git remote name
-fn resolve_repo_info(
-    repo_override: Option<String>,
-    remote_override: Option<String>,
-) -> Result<(String, String)> {
-    if let Some(r) = repo_override {
+fn resolve_repo_info(ctx: &AppContext) -> Result<(String, String)> {
+    if let Some(r) = &ctx.repo_override {
         let parts: Vec<&str> = r.split('/').collect();
         if parts.len() != 2 {
             return Err(anyhow::anyhow!(
@@ -221,7 +214,21 @@ fn resolve_repo_info(
         }
         Ok((parts[0].to_string(), parts[1].to_string()))
     } else {
-        crate::git::get_repo_info(remote_override.as_deref())
+        // Try to get from git
+        match crate::git::get_repo_info(ctx.remote_override.as_deref()) {
+            Ok(info) => Ok(info),
+            Err(_) => {
+                // Fallback to config
+                if let Some(profile) = ctx.config.get_active_profile() {
+                    if let Some(r) = &profile.repository {
+                        return Ok((profile.workspace.clone(), r.clone()));
+                    }
+                }
+                // If git failed and config didn't have it, return the git error or a generic one
+                // Re-run git to get the error if needed, or just return a new error
+                crate::git::get_repo_info(ctx.remote_override.as_deref())
+            }
+        }
     }
 }
 
