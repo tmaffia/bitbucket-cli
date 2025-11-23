@@ -9,7 +9,7 @@ Bitbucket CLI is a command line interface for interacting with Bitbucket.
 To install the latest version, run:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tmaffia/bbcli/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/tmaffia/bitbucket-cli/main/scripts/install.sh | sh
 ```
 
 ## Development
