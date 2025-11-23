@@ -19,7 +19,7 @@ else
     exit 1
 fi
 
-REPO="tmaffia/bbcli"
+REPO="tmaffia/bitbucket-cli"
 DOWNLOAD_URL="https://github.com/$REPO/releases/latest/download/$ASSET_NAME"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="bb"
