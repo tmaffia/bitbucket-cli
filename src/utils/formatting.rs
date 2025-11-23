@@ -18,7 +18,9 @@ pub fn print_key_value_table(data: Vec<(&str, String)>) {
     apply_table_style(&mut table);
 
     let width = get_terminal_width();
-    table.set_width(width).set_header(vec!["Key", "Value"]);
+    table
+        .set_width(width)
+        .set_content_arrangement(ContentArrangement::Dynamic);
 
     for (key, value) in data {
         table.add_row(vec![
