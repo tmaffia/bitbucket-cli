@@ -13,7 +13,7 @@ fn create_entry(username: &str) -> Result<Entry> {
 /// # Arguments
 ///
 /// * `username` - The username to save credentials for
-/// * `password` - The password/token to save
+/// * `api_token` - The token to save
 ///
 /// # Example
 ///
@@ -21,12 +21,12 @@ fn create_entry(username: &str) -> Result<Entry> {
 /// use bb_cli::utils::auth;
 /// auth::save_credentials("user@example.com", "secret_token").unwrap();
 /// ```
-pub fn save_credentials(username: &str, password: &str) -> Result<()> {
+pub fn save_credentials(username: &str, api_token: &str) -> Result<()> {
     let entry = create_entry(username)?;
 
     entry
-        .set_password(password)
-        .context("Failed to save password to keyring")?;
+        .set_password(api_token)
+        .context("Failed to save API token to keyring")?;
 
     Ok(())
 }
@@ -43,11 +43,11 @@ pub fn save_credentials(username: &str, password: &str) -> Result<()> {
 pub fn get_credentials(username: &str) -> Result<String> {
     let entry = create_entry(username)?;
 
-    let password = entry
+    let api_token = entry
         .get_password()
-        .context("No password found in keyring")?;
+        .context("No API token found in keyring")?;
 
-    Ok(password)
+    Ok(api_token)
 }
 
 /// Delete credentials from the system keyring

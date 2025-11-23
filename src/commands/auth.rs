@@ -29,7 +29,7 @@ async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
         .ok_or_else(|| anyhow!("No user configured in active profile"))?;
 
     // Verify password exists in keyring
-    let password = crate::utils::auth::get_credentials(username)?;
+    let api_token = crate::utils::auth::get_credentials(username)?;
 
     let base_url = profile
         .and_then(|p| p.api_url.clone())
@@ -37,7 +37,7 @@ async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
 
     // Verify credentials against API
     let client =
-        crate::api::client::BitbucketClient::new(base_url, Some((username.clone(), password)))?;
+        crate::api::client::BitbucketClient::new(base_url, Some((username.clone(), api_token)))?;
     client
         .get_current_user()
         .await
@@ -45,7 +45,7 @@ async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
 }
 
 /// Attempt to log in with provided credentials
-async fn check_login(profile: Option<&Profile>, username: &str, password: &str) -> Result<User> {
+async fn check_login(profile: Option<&Profile>, username: &str, api_token: &str) -> Result<User> {
     let base_url = profile
         .and_then(|p| p.api_url.clone())
         .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
@@ -53,7 +53,7 @@ async fn check_login(profile: Option<&Profile>, username: &str, password: &str) 
     // Verify credentials work with API first
     let client = crate::api::client::BitbucketClient::new(
         base_url,
-        Some((username.to_string(), password.to_string())),
+        Some((username.to_string(), api_token.to_string())),
     )?;
     let user = client
         .get_current_user()
@@ -61,7 +61,7 @@ async fn check_login(profile: Option<&Profile>, username: &str, password: &str) 
         .context("Authentication failed - check username and password")?;
 
     // Save to keyring after verification
-    crate::utils::auth::save_credentials(username, password)?;
+    crate::utils::auth::save_credentials(username, api_token)?;
 
     Ok(user)
 }
@@ -93,14 +93,14 @@ pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
                 return Ok(());
             }
 
-            print!("App Password: ");
+            print!("API Token: ");
             io::stdout().flush()?;
-            let mut password = String::new();
-            io::stdin().read_line(&mut password)?;
-            let password = password.trim();
+            let mut api_token = String::new();
+            io::stdin().read_line(&mut api_token)?;
+            let api_token = api_token.trim();
 
-            if password.is_empty() {
-                ui::error(msg::EMPTY_PASSWORD);
+            if api_token.is_empty() {
+                ui::error(msg::EMPTY_API_TOKEN);
                 return Ok(());
             }
 
@@ -109,7 +109,7 @@ pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
             let config = crate::config::manager::ProfileConfig::load().ok();
             let profile = config.as_ref().and_then(|c| c.get_active_profile());
 
-            match check_login(profile, username, password).await {
+            match check_login(profile, username, api_token).await {
                 Ok(user) => {
                     ui::success(msg::AUTH_SUCCESS);
                     ui::info(&msg::CREDENTIALS_SAVED.replace("{}", username));

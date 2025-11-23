@@ -18,6 +18,7 @@ impl BitbucketClient {
     /// # Arguments
     ///
     /// * `base_url` - The base URL for the Bitbucket API
+    /// * `base_url` - The base URL for the Bitbucket API
     /// * `auth` - Optional tuple of (username, password/token) for Basic Auth
     pub fn new(base_url: String, auth: Option<(String, String)>) -> Result<Self> {
         let client = Client::builder()
@@ -46,9 +47,9 @@ impl BitbucketClient {
 
         let mut request = self.client.request(method, &url);
 
-        if let Some((username, password)) = &self.auth_header {
+        if let Some((username, api_token)) = &self.auth_header {
             crate::utils::debug::log(&format!("Adding Basic Auth for user: {}", username));
-            request = request.basic_auth(username, Some(password));
+            request = request.basic_auth(username, Some(api_token));
         } else {
             crate::utils::debug::log("No Auth header present for this request.");
         }

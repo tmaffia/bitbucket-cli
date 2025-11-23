@@ -61,9 +61,9 @@ impl ProfileConfig {
         let mut auth = None;
         if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
             match crate::utils::auth::get_credentials(username) {
-                Ok(password) => {
+                Ok(api_token) => {
                     crate::utils::debug::log(&format!("Credentials found for user '{}'", username));
-                    auth = Some((username.clone(), password));
+                    auth = Some((username.clone(), api_token));
                 }
                 Err(e) => {
                     crate::utils::debug::log(&format!(
