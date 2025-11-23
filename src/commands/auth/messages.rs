@@ -1,7 +1,7 @@
 /// Authentication-related user-facing messages
 pub mod auth {
     pub const EMPTY_EMAIL: &str = "Email cannot be empty";
-    pub const EMPTY_PASSWORD: &str = "App Password cannot be empty";
+    pub const EMPTY_API_TOKEN: &str = "API Token cannot be empty";
 
     pub const LOGIN_REQUIRED: &str = "Run 'bb auth login' to authenticate";
     pub const VERIFYING_CREDENTIALS: &str = "Verifying credentials...";
