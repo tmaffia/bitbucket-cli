@@ -39,9 +39,11 @@ impl ProfileConfig {
         Ok(app_config)
     }
 
-    pub fn load_local() -> Result<Option<LocalProjectConfig>> {
-        // Try to find the git repo root first
-        let config_path = if let Ok(root) = crate::git::get_repo_root() {
+    pub fn load_local(repo_root: Option<&std::path::Path>) -> Result<Option<LocalProjectConfig>> {
+        // Use provided repo root or try to find it
+        let config_path = if let Some(root) = repo_root {
+            root.join(crate::constants::LOCAL_CONFIG_FILE_NAME)
+        } else if let Ok(root) = crate::git::get_repo_root() {
             root.join(crate::constants::LOCAL_CONFIG_FILE_NAME)
         } else {
             // Fallback to current directory if not in a git repo
@@ -198,9 +200,13 @@ pub fn set_config_value(key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn init_local_config(workspace: &str, repo: &str, remote: &str) -> Result<()> {
-    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
-    let config_path = current_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME);
+pub fn init_local_config(
+    target_dir: &std::path::Path,
+    workspace: &str,
+    repo: &str,
+    remote: &str,
+) -> Result<()> {
+    let config_path = target_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME);
 
     if config_path.exists() {
         return Err(anyhow::anyhow!(

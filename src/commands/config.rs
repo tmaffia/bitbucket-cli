@@ -60,8 +60,16 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
             };
 
             if local_init {
-                crate::config::manager::init_local_config(&workspace, &repo, &remote)?;
-                ui::success("Local configuration initialized");
+                // Try to find git repo root, otherwise use current dir
+                let target_dir = crate::git::get_repo_root().unwrap_or_else(|_| {
+                    std::env::current_dir().expect("Failed to get current directory")
+                });
+
+                crate::config::manager::init_local_config(&target_dir, &workspace, &repo, &remote)?;
+                ui::success(&format!(
+                    "Local configuration initialized at {:?}",
+                    target_dir
+                ));
             } else {
                 crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
                 if !repo.is_empty() {
