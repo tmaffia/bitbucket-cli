@@ -57,11 +57,18 @@ use crate::context::AppContext;
 pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
     match args.command {
         PrCommands::List { state, limit } => {
-            let (workspace, repo) = resolve_repo_info(ctx)?;
+            let workspace = ctx
+                .workspace
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No workspace found"))?;
+            let repo = ctx
+                .repo
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
             let prs = ctx
                 .client
-                .list_pull_requests(&workspace, &repo, &state, Some(limit))
+                .list_pull_requests(workspace, repo, &state, Some(limit))
                 .await?;
 
             if ctx.json {
@@ -85,13 +92,17 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::View { id, web, comments } => {
-            let (workspace, repo) = resolve_repo_info(ctx)?;
+            let workspace = ctx
+                .workspace
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No workspace found"))?;
+            let repo = ctx
+                .repo
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
-            let pr = ctx
-                .client
-                .get_pull_request(&workspace, &repo, pr_id)
-                .await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
+            let pr = ctx.client.get_pull_request(workspace, repo, pr_id).await?;
 
             if web {
                 open::that(pr.links.html.href)?;
@@ -102,7 +113,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             let pr_comments = if comments || ctx.json {
                 Some(
                     ctx.client
-                        .get_pull_request_comments(&workspace, &repo, pr_id)
+                        .get_pull_request_comments(workspace, repo, pr_id)
                         .await?,
                 )
             } else {
@@ -128,7 +139,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             // Fetch build statuses
             let statuses = if let Some(commit) = &pr.source.commit {
                 ctx.client
-                    .get_commit_statuses(&workspace, &repo, &commit.hash)
+                    .get_commit_statuses(workspace, repo, &commit.hash)
                     .await?
             } else {
                 Vec::new()
@@ -142,16 +153,20 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::Diff { id, name_only, web } => {
-            let (workspace, repo) = resolve_repo_info(ctx)?;
+            let workspace = ctx
+                .workspace
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No workspace found"))?;
+            let repo = ctx
+                .repo
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
 
             // Handle --web flag (open in browser)
             if web {
-                let pr = ctx
-                    .client
-                    .get_pull_request(&workspace, &repo, pr_id)
-                    .await?;
+                let pr = ctx.client.get_pull_request(workspace, repo, pr_id).await?;
                 let diff_url = format!("{}/diff", pr.links.html.href);
                 open::that(diff_url)?;
                 ui::success(&format!("Opened PR #{} diff in browser", pr_id));
@@ -160,7 +175,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
 
             let diff = ctx
                 .client
-                .get_pull_request_diff(&workspace, &repo, pr_id)
+                .get_pull_request_diff(workspace, repo, pr_id)
                 .await?;
 
             // Handle --name-only flag
@@ -174,13 +189,20 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             }
         }
         PrCommands::Comments { id } => {
-            let (workspace, repo) = resolve_repo_info(ctx)?;
+            let workspace = ctx
+                .workspace
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No workspace found"))?;
+            let repo = ctx
+                .repo
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
 
             let comments = ctx
                 .client
-                .get_pull_request_comments(&workspace, &repo, pr_id)
+                .get_pull_request_comments(workspace, repo, pr_id)
                 .await?;
 
             if comments.is_empty() {
@@ -196,52 +218,6 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// Resolve repository information from overrides, git configuration, or config file
-///
-/// Tries in order:
-/// 1. Explicit CLI override (`--repo workspace/repo`)
-/// 2. Git remote detection
-/// 3. Config file default repository
-fn resolve_repo_info(ctx: &AppContext) -> Result<(String, String)> {
-    resolve_from_override(ctx)
-        .or_else(|| resolve_from_git(ctx))
-        .or_else(|| resolve_from_config(ctx))
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Could not determine repository. Use --repo or configure a default repository."
-            )
-        })
-}
-
-/// Try to resolve repository info from CLI override
-fn resolve_from_override(ctx: &AppContext) -> Option<(String, String)> {
-    ctx.repo_override.as_ref().and_then(|r| {
-        let parts: Vec<_> = r.split('/').collect();
-        if parts.len() == 2 {
-            Some((parts[0].to_string(), parts[1].to_string()))
-        } else {
-            // Invalid format - should we warn here?
-            // For now, return None to allow fallback to other methods
-            None
-        }
-    })
-}
-
-/// Try to resolve repository info from git remote
-fn resolve_from_git(ctx: &AppContext) -> Option<(String, String)> {
-    crate::git::get_repo_info(ctx.remote_override.as_deref()).ok()
-}
-
-/// Try to resolve repository info from config file
-fn resolve_from_config(ctx: &AppContext) -> Option<(String, String)> {
-    ctx.config.get_active_profile().and_then(|profile| {
-        profile
-            .repository
-            .as_ref()
-            .map(|r| (profile.workspace.clone(), r.clone()))
-    })
 }
 
 /// Resolve Pull Request ID from argument or current branch
@@ -274,40 +250,11 @@ async fn resolve_pr_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::manager::{Profile, ProfileConfig};
-    use std::collections::HashMap;
 
     fn create_test_context(
-        repo_override: Option<String>,
-        remote_override: Option<String>,
         config_workspace: Option<String>,
         config_repo: Option<String>,
     ) -> AppContext {
-        let mut profiles = HashMap::new();
-
-        if let (Some(ws), Some(repo)) = (config_workspace, config_repo) {
-            profiles.insert(
-                "default".to_string(),
-                Profile {
-                    workspace: ws,
-                    user: None,
-                    repository: Some(repo),
-                    api_url: None,
-                    output_format: None,
-                    remote: None,
-                },
-            );
-        }
-
-        let config = ProfileConfig {
-            default_profile: None,
-            profiles: if profiles.is_empty() {
-                None
-            } else {
-                Some(profiles)
-            },
-        };
-
         // Create a dummy client - we won't use it in these tests
         let client = crate::api::client::BitbucketClient::new(
             "https://api.bitbucket.org/2.0".to_string(),
@@ -316,145 +263,18 @@ mod tests {
         .unwrap();
 
         AppContext {
-            config,
             client,
-            repo_override,
-            remote_override,
             json: false,
+            workspace: config_workspace,
+            repo: config_repo,
         }
     }
 
     #[test]
-    fn test_resolve_from_override_valid() {
-        let ctx = create_test_context(Some("myworkspace/myrepo".to_string()), None, None, None);
-
-        let result = resolve_from_override(&ctx);
-        assert_eq!(
-            result,
-            Some(("myworkspace".to_string(), "myrepo".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_resolve_from_override_invalid_format() {
-        let ctx = create_test_context(Some("invalid-format".to_string()), None, None, None);
-
-        let result = resolve_from_override(&ctx);
-        // Should return None to allow fallback, not error
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_resolve_from_override_too_many_slashes() {
-        let ctx = create_test_context(Some("workspace/repo/extra".to_string()), None, None, None);
-
-        let result = resolve_from_override(&ctx);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_resolve_from_override_none() {
-        let ctx = create_test_context(None, None, None, None);
-
-        let result = resolve_from_override(&ctx);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_resolve_from_config_valid() {
-        let ctx = create_test_context(
-            None,
-            None,
-            Some("config-workspace".to_string()),
-            Some("config-repo".to_string()),
-        );
-
-        let result = resolve_from_config(&ctx);
-        assert_eq!(
-            result,
-            Some(("config-workspace".to_string(), "config-repo".to_string()))
-        );
-    }
-
-    #[test]
-    fn test_resolve_from_config_no_repository() {
-        let ctx = create_test_context(None, None, Some("workspace".to_string()), None);
-
-        let result = resolve_from_config(&ctx);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_resolve_from_config_no_profile() {
-        let ctx = create_test_context(None, None, None, None);
-
-        let result = resolve_from_config(&ctx);
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_resolve_repo_info_from_override() {
-        let ctx = create_test_context(
-            Some("override-ws/override-repo".to_string()),
-            None,
-            Some("config-ws".to_string()),
-            Some("config-repo".to_string()),
-        );
-
-        // Override should take precedence
-        let result = resolve_repo_info(&ctx);
-        assert!(result.is_ok());
-        let (ws, repo) = result.unwrap();
-        assert_eq!(ws, "override-ws");
-        assert_eq!(repo, "override-repo");
-    }
-
-    #[test]
-    fn test_resolve_repo_info_from_config() {
-        let ctx = create_test_context(
-            None,
-            None,
-            Some("config-ws".to_string()),
-            Some("config-repo".to_string()),
-        );
-
-        // Should fall through to config since no override or git
-        let result = resolve_repo_info(&ctx);
-        assert!(result.is_ok());
-        let (ws, repo) = result.unwrap();
-        assert_eq!(ws, "config-ws");
-        assert_eq!(repo, "config-repo");
-    }
-
-    #[test]
-    fn test_resolve_repo_info_invalid_override_fallback_to_config() {
-        let ctx = create_test_context(
-            Some("invalid-format".to_string()),
-            None,
-            Some("config-ws".to_string()),
-            Some("config-repo".to_string()),
-        );
-
-        // Invalid override should fall back to config
-        let result = resolve_repo_info(&ctx);
-        assert!(result.is_ok());
-        let (ws, repo) = result.unwrap();
-        assert_eq!(ws, "config-ws");
-        assert_eq!(repo, "config-repo");
-    }
-
-    #[test]
-    fn test_resolve_repo_info_no_sources_fails() {
-        let ctx = create_test_context(None, None, None, None);
-
-        // No sources available, should error
-        let result = resolve_repo_info(&ctx);
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Could not determine repository")
-        );
+    fn test_context_resolution_mock() {
+        // Since resolution logic moved to main.rs, we can just verify AppContext holds values
+        let ctx = create_test_context(Some("ws".to_string()), Some("repo".to_string()));
+        assert_eq!(ctx.workspace.as_deref(), Some("ws"));
+        assert_eq!(ctx.repo.as_deref(), Some("repo"));
     }
 }

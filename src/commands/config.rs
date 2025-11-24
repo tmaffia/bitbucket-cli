@@ -98,39 +98,69 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
                 println!("{:#?}", config);
                 return Ok(());
             }
+            let p = config.get_active_profile();
 
-            let key = key.unwrap();
-
-            // Match on the key to access the appropriate field
-            let value = match key.as_str() {
-                "default_profile" => config.default_profile.as_deref(),
-                "workspace" => config.get_active_profile().map(|p| p.workspace.as_str()),
-                "user" => config.get_active_profile().and_then(|p| p.user.as_deref()),
-                "repository" => config
-                    .get_active_profile()
-                    .and_then(|p| p.repository.as_deref()),
-                "api_url" => config
-                    .get_active_profile()
-                    .and_then(|p| p.api_url.as_deref()),
-                "output_format" => config
-                    .get_active_profile()
-                    .and_then(|p| p.output_format.as_deref()),
-                "remote" => config
-                    .get_active_profile()
-                    .and_then(|p| p.remote.as_deref()),
-
-                _ => {
-                    ui::error(&format!("Unknown key: '{}'", key));
-                    ui::info(
-                        "Valid keys: default_profile, workspace, user, repository, api_url, output_format, remote",
+            match key {
+                Some(key) => match key.as_str() {
+                    "default_profile" => {
+                        println!("{}", config.default_profile.as_deref().unwrap_or("Not set"))
+                    }
+                    "user" => println!(
+                        "{}",
+                        p.and_then(|prof| prof.user.as_deref()).unwrap_or("Not set")
+                    ),
+                    "workspace" => {
+                        println!(
+                            "{}",
+                            p.and_then(|prof| prof.workspace.as_deref())
+                                .unwrap_or("Not set")
+                        )
+                    }
+                    "api_url" => {
+                        println!(
+                            "{}",
+                            p.and_then(|prof| prof.api_url.as_deref())
+                                .unwrap_or("Not set")
+                        )
+                    }
+                    "output_format" => {
+                        println!(
+                            "{}",
+                            p.and_then(|prof| prof.output_format.as_deref())
+                                .unwrap_or("Not set")
+                        )
+                    }
+                    _ => {
+                        ui::error(&format!("Unknown key: '{}'", key));
+                        ui::info(
+                            "Valid keys: default_profile, workspace, user, api_url, output_format",
+                        );
+                    }
+                },
+                None => {
+                    println!("Current Profile Settings:");
+                    println!(
+                        "  Default Profile: {}",
+                        config.default_profile.as_deref().unwrap_or("Not set")
                     );
-                    return Ok(());
+                    if let Some(profile) = p {
+                        println!("  User: {}", profile.user.as_deref().unwrap_or("Not set"));
+                        println!(
+                            "  Workspace: {}",
+                            profile.workspace.as_deref().unwrap_or("Not set")
+                        );
+                        println!(
+                            "  API URL: {}",
+                            profile.api_url.as_deref().unwrap_or("Not set")
+                        );
+                        println!(
+                            "  Output Format: {}",
+                            profile.output_format.as_deref().unwrap_or("Not set")
+                        );
+                    } else {
+                        ui::warning("No active profile found.");
+                    }
                 }
-            };
-
-            match value {
-                Some(v) => println!("{}", v),
-                None => ui::warning("Key not found or not set"),
             }
         }
     }

@@ -19,6 +19,24 @@ pub fn get_current_branch() -> Result<String> {
     Ok(branch)
 }
 
+pub fn get_repo_root() -> Result<std::path::PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .context("Failed to execute git command")?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Not a git repository"));
+    }
+
+    let root_path = String::from_utf8(output.stdout)
+        .context("Invalid UTF-8 in repo root path")?
+        .trim()
+        .to_string();
+
+    Ok(std::path::PathBuf::from(root_path))
+}
+
 pub fn get_repo_info(remote_name: Option<&str>) -> Result<(String, String)> {
     let remote = remote_name.unwrap_or("origin");
     // Get remote URL
