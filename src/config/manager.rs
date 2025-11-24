@@ -14,9 +14,19 @@ pub struct ProfileConfig {
 pub struct Profile {
     pub workspace: Option<String>,
     pub user: Option<String>,
-    pub repository: Option<String>,
     pub api_url: Option<String>,
     pub output_format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct LocalProjectConfig {
+    pub project: Option<ProjectContext>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProjectContext {
+    pub workspace: Option<String>,
+    pub repository: Option<String>,
     pub remote: Option<String>,
 }
 
@@ -29,7 +39,7 @@ impl ProfileConfig {
         Ok(app_config)
     }
 
-    pub fn load_local() -> Result<Option<Self>> {
+    pub fn load_local() -> Result<Option<LocalProjectConfig>> {
         // Try to find the git repo root first
         let config_path = if let Ok(root) = crate::git::get_repo_root() {
             root.join(crate::constants::LOCAL_CONFIG_FILE_NAME)
@@ -45,10 +55,10 @@ impl ProfileConfig {
                 .build()
                 .context("Failed to build local configuration")?;
 
-            let app_config: ProfileConfig = config
+            let local_config: LocalProjectConfig = config
                 .try_deserialize()
                 .context("Failed to deserialize local configuration")?;
-            return Ok(Some(app_config));
+            return Ok(Some(local_config));
         }
 
         Ok(None)
@@ -201,25 +211,22 @@ pub fn init_local_config(workspace: &str, repo: &str, remote: &str) -> Result<()
 
     let mut doc = toml_edit::DocumentMut::new();
 
-    // Create [profile.default]
-    let mut profile_default = toml_edit::Table::new();
-    profile_default.insert(
+    // Create [project]
+    let mut project = toml_edit::Table::new();
+    project.insert(
         "workspace",
         toml_edit::Item::Value(toml_edit::Value::from(workspace)),
     );
-    profile_default.insert(
+    project.insert(
         "repository",
         toml_edit::Item::Value(toml_edit::Value::from(repo)),
     );
-    profile_default.insert(
+    project.insert(
         "remote",
         toml_edit::Item::Value(toml_edit::Value::from(remote)),
     );
 
-    let mut profile = toml_edit::Table::new();
-    profile.insert("default", toml_edit::Item::Table(profile_default));
-
-    doc.insert("profile", toml_edit::Item::Table(profile));
+    doc.insert("project", toml_edit::Item::Table(project));
 
     std::fs::write(&config_path, doc.to_string())?;
     Ok(())
@@ -238,10 +245,8 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: Some("default_user".to_string()),
-                repository: None,
                 api_url: None,
                 output_format: None,
-                remote: None,
             },
         );
 
@@ -264,10 +269,8 @@ mod tests {
             Profile {
                 workspace: Some("custom_ws".to_string()),
                 user: Some("custom_user".to_string()),
-                repository: None,
                 api_url: None,
                 output_format: None,
-                remote: None,
             },
         );
 
@@ -289,10 +292,8 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: Some("test_user".to_string()),
-                repository: None,
                 api_url: None,
                 output_format: None,
-                remote: None,
             },
         );
 
@@ -313,10 +314,8 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: None,
-                repository: None,
                 api_url: None,
                 output_format: None,
-                remote: None,
             },
         );
 

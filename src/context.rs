@@ -40,7 +40,7 @@ impl AppContext {
             // We are in a git repo
             let remote_name = cli.remote.as_deref().or(local_config
                 .as_ref()
-                .and_then(|c| c.get_active_profile())
+                .and_then(|c| c.project.as_ref())
                 .and_then(|p| p.remote.as_deref()));
 
             match git::get_repo_info(remote_name) {
@@ -63,7 +63,7 @@ impl AppContext {
             .or_else(|| {
                 local_config
                     .as_ref()
-                    .and_then(|c| c.get_active_profile())
+                    .and_then(|c| c.project.as_ref())
                     .and_then(|p| p.workspace.clone())
             })
             .or_else(|| git_info.as_ref().map(|(ws, _, _)| ws.clone()))
@@ -82,7 +82,7 @@ impl AppContext {
             .or_else(|| {
                 local_config
                     .as_ref()
-                    .and_then(|c| c.get_active_profile())
+                    .and_then(|c| c.project.as_ref())
                     .and_then(|p| p.repository.clone())
             })
             .or_else(|| git_info.as_ref().map(|(_, r, _)| r.clone()));
