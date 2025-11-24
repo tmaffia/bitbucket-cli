@@ -68,7 +68,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
 
             let prs = ctx
                 .client
-                .list_pull_requests(&workspace, &repo, &state, Some(limit))
+                .list_pull_requests(workspace, repo, &state, Some(limit))
                 .await?;
 
             if ctx.json {
@@ -101,11 +101,8 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
-            let pr = ctx
-                .client
-                .get_pull_request(&workspace, &repo, pr_id)
-                .await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
+            let pr = ctx.client.get_pull_request(workspace, repo, pr_id).await?;
 
             if web {
                 open::that(pr.links.html.href)?;
@@ -116,7 +113,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             let pr_comments = if comments || ctx.json {
                 Some(
                     ctx.client
-                        .get_pull_request_comments(&workspace, &repo, pr_id)
+                        .get_pull_request_comments(workspace, repo, pr_id)
                         .await?,
                 )
             } else {
@@ -142,7 +139,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             // Fetch build statuses
             let statuses = if let Some(commit) = &pr.source.commit {
                 ctx.client
-                    .get_commit_statuses(&workspace, &repo, &commit.hash)
+                    .get_commit_statuses(workspace, repo, &commit.hash)
                     .await?
             } else {
                 Vec::new()
@@ -165,14 +162,11 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
 
             // Handle --web flag (open in browser)
             if web {
-                let pr = ctx
-                    .client
-                    .get_pull_request(&workspace, &repo, pr_id)
-                    .await?;
+                let pr = ctx.client.get_pull_request(workspace, repo, pr_id).await?;
                 let diff_url = format!("{}/diff", pr.links.html.href);
                 open::that(diff_url)?;
                 ui::success(&format!("Opened PR #{} diff in browser", pr_id));
@@ -181,7 +175,7 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
 
             let diff = ctx
                 .client
-                .get_pull_request_diff(&workspace, &repo, pr_id)
+                .get_pull_request_diff(workspace, repo, pr_id)
                 .await?;
 
             // Handle --name-only flag
@@ -204,11 +198,11 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, &workspace, &repo).await?;
+            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
 
             let comments = ctx
                 .client
-                .get_pull_request_comments(&workspace, &repo, pr_id)
+                .get_pull_request_comments(workspace, repo, pr_id)
                 .await?;
 
             if comments.is_empty() {
