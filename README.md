@@ -1,4 +1,4 @@
-# bbcli v0.3.4
+# bbcli v0.3.5
 
 Bitbucket CLI is a command line interface for interacting with Bitbucket.
 
