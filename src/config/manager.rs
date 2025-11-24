@@ -12,7 +12,7 @@ pub struct ProfileConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Profile {
-    pub workspace: String,
+    pub workspace: Option<String>,
     pub user: Option<String>,
     pub repository: Option<String>,
     pub api_url: Option<String>,
@@ -21,12 +21,42 @@ pub struct Profile {
 }
 
 impl ProfileConfig {
-    pub fn load() -> Result<Self> {
-        let config = build_config()?;
+    pub fn load_global() -> Result<Self> {
+        let config = build_global_config()?;
         let app_config: ProfileConfig = config
             .try_deserialize()
-            .context("Failed to deserialize configuration")?;
+            .context("Failed to deserialize global configuration")?;
         Ok(app_config)
+    }
+
+    pub fn load_local() -> Result<Option<Self>> {
+        // Try to find the git repo root first
+        let config_path = if let Ok(root) = crate::git::get_repo_root() {
+            root.join(crate::constants::LOCAL_CONFIG_FILE_NAME)
+        } else {
+            // Fallback to current directory if not in a git repo
+            let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+            current_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME)
+        };
+
+        if config_path.exists() {
+            let config = Config::builder()
+                .add_source(config::File::from(config_path).format(FileFormat::Toml))
+                .build()
+                .context("Failed to build local configuration")?;
+
+            let app_config: ProfileConfig = config
+                .try_deserialize()
+                .context("Failed to deserialize local configuration")?;
+            return Ok(Some(app_config));
+        }
+
+        Ok(None)
+    }
+
+    // Deprecated: keeping for compatibility during refactor if needed, but prefer load_global
+    pub fn load() -> Result<Self> {
+        Self::load_global()
     }
 
     pub fn get_active_profile(&self) -> Option<&Profile> {
@@ -80,10 +110,10 @@ impl ProfileConfig {
     }
 }
 
-fn build_config() -> Result<Config> {
+fn build_global_config() -> Result<Config> {
     let mut builder = Config::builder();
 
-    // 1. Global config: ~/.config/bb-cli/config.toml
+    // Global config: ~/.config/bb-cli/config.toml
     if let Some(config_dir) = get_config_dir() {
         let global_config_path = config_dir
             .join(crate::constants::CONFIG_DIR_NAME)
@@ -94,30 +124,9 @@ fn build_config() -> Result<Config> {
         }
     }
 
-    // 2. Local config: Walk up from current directory looking for .bb-cli file
-    let mut current_dir = std::env::current_dir().context("Failed to get current directory")?;
-    let mut config_found = false;
-
-    loop {
-        let local_config_path = current_dir.join(crate::constants::LOCAL_CONFIG_FILE_NAME);
-        if local_config_path.exists() {
-            builder =
-                builder.add_source(config::File::from(local_config_path).format(FileFormat::Toml));
-            config_found = true;
-            break;
-        }
-
-        if !current_dir.pop() {
-            break;
-        }
-    }
-
-    // If we didn't find one by walking up, check if we are in a git repo and check the root
-    if !config_found {
-        // Placeholder for git repo check if needed
-    }
-
-    builder.build().context("Failed to build configuration")
+    builder
+        .build()
+        .context("Failed to build global configuration")
 }
 
 pub fn get_config_dir() -> Option<std::path::PathBuf> {
@@ -227,7 +236,7 @@ mod tests {
         profiles.insert(
             "default".to_string(),
             Profile {
-                workspace: "ws".to_string(),
+                workspace: Some("ws".to_string()),
                 user: Some("default_user".to_string()),
                 repository: None,
                 api_url: None,
@@ -243,7 +252,7 @@ mod tests {
 
         let profile = config.get_active_profile();
         assert!(profile.is_some());
-        assert_eq!(profile.unwrap().workspace, "ws");
+        assert_eq!(profile.unwrap().workspace.as_deref(), Some("ws"));
         assert_eq!(profile.unwrap().user.as_deref(), Some("default_user"));
     }
 
@@ -253,7 +262,7 @@ mod tests {
         profiles.insert(
             "custom".to_string(),
             Profile {
-                workspace: "custom_ws".to_string(),
+                workspace: Some("custom_ws".to_string()),
                 user: Some("custom_user".to_string()),
                 repository: None,
                 api_url: None,
@@ -269,7 +278,7 @@ mod tests {
 
         let profile = config.get_active_profile();
         assert!(profile.is_some());
-        assert_eq!(profile.unwrap().workspace, "custom_ws");
+        assert_eq!(profile.unwrap().workspace.as_deref(), Some("custom_ws"));
     }
 
     #[test]
@@ -278,7 +287,7 @@ mod tests {
         profiles.insert(
             "default".to_string(),
             Profile {
-                workspace: "ws".to_string(),
+                workspace: Some("ws".to_string()),
                 user: Some("test_user".to_string()),
                 repository: None,
                 api_url: None,
@@ -302,7 +311,7 @@ mod tests {
         profiles.insert(
             "default".to_string(),
             Profile {
-                workspace: "ws".to_string(),
+                workspace: Some("ws".to_string()),
                 user: None,
                 repository: None,
                 api_url: None,

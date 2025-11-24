@@ -104,7 +104,9 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
             // Match on the key to access the appropriate field
             let value = match key.as_str() {
                 "default_profile" => config.default_profile.as_deref(),
-                "workspace" => config.get_active_profile().map(|p| p.workspace.as_str()),
+                "workspace" => config
+                    .get_active_profile()
+                    .and_then(|p| p.workspace.as_deref()),
                 "user" => config.get_active_profile().and_then(|p| p.user.as_deref()),
                 "repository" => config
                     .get_active_profile()
