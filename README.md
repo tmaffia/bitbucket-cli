@@ -1,4 +1,4 @@
-# bbcli v0.3.5
+# bbcli v0.3.6
 
 Bitbucket CLI is a command line interface for interacting with Bitbucket.
 
@@ -63,6 +63,41 @@ To use this CLI, you need an API Token from your Atlassian account:
     ```bash
     bb config init
     ```
+
+## Global Flags
+
+- `--json`: Output results in JSON format (available for `list` commands).
+
+## Usage
+
+### Repositories
+
+List repositories in your workspace:
+
+```bash
+bb repo list
+
+# List with a custom limit (default is 100)
+bb repo list --limit 20
+```
+
+### Configuration
+
+View your current configuration (active profile and local overrides):
+
+```bash
+bb config list
+```
+
+Set a configuration value:
+
+```bash
+# Set the active profile (user)
+bb config set user <PROFILE_NAME>
+
+# Set workspace for the default profile
+bb config set profile.default.workspace <WORKSPACE_NAME>
+```
 
 ## Development
 

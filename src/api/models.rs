@@ -50,6 +50,11 @@ pub struct Repository {
     pub name: String,
     pub full_name: String,
     pub uuid: String,
+    pub description: Option<String>,
+    pub language: Option<String>,
+    pub updated_on: Option<String>,
+    pub website: Option<String>,
+    pub is_private: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

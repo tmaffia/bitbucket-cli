@@ -40,4 +40,6 @@ pub enum Commands {
     Auth(commands::auth::AuthArgs),
     /// Configuration
     Config(commands::config::ConfigArgs),
+    /// Repository operations
+    Repo(commands::repo::RepoArgs),
 }

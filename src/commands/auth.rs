@@ -31,9 +31,7 @@ async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
     // Verify password exists in keyring
     let api_token = crate::utils::auth::get_credentials(username)?;
 
-    let base_url = profile
-        .and_then(|p| p.api_url.clone())
-        .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
+    let base_url = crate::constants::DEFAULT_API_URL.to_string();
 
     // Verify credentials against API
     let client =
@@ -45,10 +43,8 @@ async fn get_authenticated_user(profile: Option<&Profile>) -> Result<User> {
 }
 
 /// Attempt to log in with provided credentials
-async fn check_login(profile: Option<&Profile>, username: &str, api_token: &str) -> Result<User> {
-    let base_url = profile
-        .and_then(|p| p.api_url.clone())
-        .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
+async fn check_login(username: &str, api_token: &str) -> Result<User> {
+    let base_url = crate::constants::DEFAULT_API_URL.to_string();
 
     // Verify credentials work with API first
     let client = crate::api::client::BitbucketClient::new(
@@ -106,10 +102,7 @@ pub async fn handle(_ctx: &AppContext, args: AuthArgs) -> Result<()> {
 
             ui::info(msg::VERIFYING_CREDENTIALS);
 
-            let config = crate::config::manager::ProfileConfig::load().ok();
-            let profile = config.as_ref().and_then(|c| c.get_active_profile());
-
-            match check_login(profile, username, api_token).await {
+            match check_login(username, api_token).await {
                 Ok(user) => {
                     ui::success(msg::AUTH_SUCCESS);
                     ui::info(&msg::CREDENTIALS_SAVED.replace("{}", username));

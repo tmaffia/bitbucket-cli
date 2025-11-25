@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use std::io::{self, Write};
 
 use crate::display::ui;
 
@@ -24,79 +23,86 @@ pub enum ConfigCommands {
 
 use crate::context::AppContext;
 
-pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
+pub async fn handle(ctx: &AppContext, args: ConfigArgs) -> Result<()> {
     match args.command {
         ConfigCommands::Init => {
-            ui::info("Initializing config...");
-            // Interactive setup
-            let mut input = String::new();
-
-            print!("Initialize configuration in current directory? (y/n) [n]: ");
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut input)?;
-            let local_init = input.trim().to_lowercase() == "y";
-
-            input.clear();
-            print!("Workspace (e.g., myworkspace): ");
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut input)?;
-            let workspace = input.trim().to_string();
-
-            input.clear();
-            print!("Default repository (optional): ");
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut input)?;
-            let repo = input.trim().to_string();
-
-            input.clear();
-            print!("Default remote [origin]: ");
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut input)?;
-            let input_remote = input.trim().to_string();
-            let remote = if input_remote.is_empty() {
-                "origin".to_string()
-            } else {
-                input_remote
-            };
-
-            if local_init {
-                // Try to find git repo root, otherwise use current dir
-                let target_dir = crate::git::get_repo_root().unwrap_or_else(|_| {
-                    std::env::current_dir().expect("Failed to get current directory")
-                });
-
-                crate::config::manager::init_local_config(&target_dir, &workspace, &repo, &remote)?;
-                ui::success(&format!(
-                    "Local configuration initialized at {:?}",
-                    target_dir
-                ));
-            } else {
-                crate::config::manager::set_config_value("profile.default.workspace", &workspace)?;
-                if !repo.is_empty() {
-                    crate::config::manager::set_config_value("profile.default.repository", &repo)?;
-                }
-                crate::config::manager::set_config_value("profile.default.remote", &remote)?;
-
-                input.clear();
-                print!("Default user email (optional): ");
-                io::stdout().flush()?;
-                io::stdin().read_line(&mut input)?;
-                let user = input.trim().to_string();
-
-                if !user.is_empty() {
-                    crate::config::manager::set_config_value("profile.default.user", &user)?;
-                }
-
-                ui::success("Configuration initialized");
-            }
+            crate::config::setup::interactive_init()?;
         }
         ConfigCommands::List => {
-            let config = crate::config::manager::ProfileConfig::load()?;
-            println!("{:#?}", config);
+            let config = crate::config::manager::ProfileConfig::load_global().unwrap_or_default();
+            let repo_root = crate::git::get_repo_root().ok();
+            let local_config =
+                crate::config::manager::ProfileConfig::load_local(repo_root.as_deref())?;
+
+            // Resolve active values
+            let active_profile = config.get_active_profile();
+
+            let mut config_values = Vec::new();
+
+            // Helper to add values if present
+            let mut add_val = |key: &str, val: Option<String>| {
+                if let Some(v) = val {
+                    config_values.push((key.to_string(), v));
+                }
+            };
+
+            // 1. User (Global only)
+            add_val("user", active_profile.and_then(|p| p.user.clone()));
+
+            // 2. Workspace (Local > Global)
+            let workspace = local_config
+                .as_ref()
+                .and_then(|c| c.project.as_ref())
+                .and_then(|p| p.workspace.clone())
+                .or_else(|| active_profile.and_then(|p| p.workspace.clone()));
+            add_val("workspace", workspace);
+
+            // 3. Repository (Local only)
+            let repo = local_config
+                .as_ref()
+                .and_then(|c| c.project.as_ref())
+                .and_then(|p| p.repository.clone());
+            add_val("repository", repo);
+
+            // 4. Remote (Local only)
+            let remote = local_config
+                .as_ref()
+                .and_then(|c| c.project.as_ref())
+                .and_then(|p| p.remote.clone());
+            add_val("remote", remote);
+
+            if ctx.json {
+                let mut map = serde_json::Map::new();
+                for (k, v) in config_values {
+                    map.insert(k, serde_json::Value::String(v));
+                }
+                ui::print_json(&map)?;
+            } else {
+                for (k, v) in config_values {
+                    println!("{}={}", k, v);
+                }
+            }
         }
         ConfigCommands::Set { key, value } => {
-            crate::config::manager::set_config_value(&key, &value)?;
-            ui::success(&format!("Set {} = {}", key, value));
+            // Context-aware setting
+            // If key is "user", set global user.
+            // If key is "workspace", "repository", "remote", set it for the ACTIVE profile.
+            // Otherwise, set as provided (full key).
+
+            let real_key = if key == "user" {
+                key
+            } else if ["workspace", "repository", "remote"].contains(&key.as_str()) {
+                let config =
+                    crate::config::manager::ProfileConfig::load_global().unwrap_or_default();
+                // If no active profile (user) is set, default to "default"
+                let profile_name = config.user.as_deref().unwrap_or("default");
+                format!("profile.{}.{}", profile_name, key)
+            } else {
+                key
+            };
+
+            crate::config::manager::set_config_value(&real_key, &value)?;
+            ui::success(&format!("Set {} = {}", real_key, value));
         }
         ConfigCommands::Get { key } => {
             let config = crate::config::manager::ProfileConfig::load()?;
@@ -110,13 +116,7 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
 
             match key {
                 Some(key) => match key.as_str() {
-                    "default_profile" => {
-                        println!("{}", config.default_profile.as_deref().unwrap_or("Not set"))
-                    }
-                    "user" => println!(
-                        "{}",
-                        p.and_then(|prof| prof.user.as_deref()).unwrap_or("Not set")
-                    ),
+                    "user" => println!("{}", config.user.as_deref().unwrap_or("Not set")),
                     "workspace" => {
                         println!(
                             "{}",
@@ -124,46 +124,18 @@ pub async fn handle(_ctx: &AppContext, args: ConfigArgs) -> Result<()> {
                                 .unwrap_or("Not set")
                         )
                     }
-                    "api_url" => {
-                        println!(
-                            "{}",
-                            p.and_then(|prof| prof.api_url.as_deref())
-                                .unwrap_or("Not set")
-                        )
-                    }
-                    "output_format" => {
-                        println!(
-                            "{}",
-                            p.and_then(|prof| prof.output_format.as_deref())
-                                .unwrap_or("Not set")
-                        )
-                    }
                     _ => {
                         ui::error(&format!("Unknown key: '{}'", key));
-                        ui::info(
-                            "Valid keys: default_profile, workspace, user, api_url, output_format",
-                        );
+                        ui::info("Valid keys: user, workspace");
                     }
                 },
                 None => {
                     println!("Current Profile Settings:");
-                    println!(
-                        "  Default Profile: {}",
-                        config.default_profile.as_deref().unwrap_or("Not set")
-                    );
+                    println!("  User: {}", config.user.as_deref().unwrap_or("Not set"));
                     if let Some(profile) = p {
-                        println!("  User: {}", profile.user.as_deref().unwrap_or("Not set"));
                         println!(
                             "  Workspace: {}",
                             profile.workspace.as_deref().unwrap_or("Not set")
-                        );
-                        println!(
-                            "  API URL: {}",
-                            profile.api_url.as_deref().unwrap_or("Not set")
-                        );
-                        println!(
-                            "  Output Format: {}",
-                            profile.output_format.as_deref().unwrap_or("Not set")
                         );
                     } else {
                         ui::warning("No active profile found.");

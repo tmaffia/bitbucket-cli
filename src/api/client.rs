@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 ///
 /// Handles communication with the Bitbucket Cloud API v2.0.
 /// Supports authentication via Basic Auth (App Password).
+#[derive(Clone)]
 pub struct BitbucketClient {
     client: Client,
     base_url: String,
@@ -107,9 +108,11 @@ impl BitbucketClient {
         limit: Option<u32>,
     ) -> Result<Vec<crate::api::models::PullRequest>> {
         let mut all_prs = Vec::new();
+        // Use pagelen=100 (max) or limit if smaller to optimize API calls
+        let page_len = limit.map(|l| std::cmp::min(l, 100)).unwrap_or(100);
         let mut path = format!(
-            "/repositories/{}/{}/pullrequests?state={}",
-            workspace, repo, state
+            "/repositories/{}/{}/pullrequests?state={}&pagelen={}",
+            workspace, repo, state, page_len
         );
 
         loop {
@@ -133,6 +136,45 @@ impl BitbucketClient {
         }
 
         Ok(all_prs)
+    }
+
+    /// List repositories in a workspace
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `limit` - Optional maximum number of repositories to return
+    pub async fn list_repositories(
+        &self,
+        workspace: &str,
+        limit: Option<u32>,
+    ) -> Result<Vec<crate::api::models::Repository>> {
+        let mut all_repos = Vec::new();
+        // Use pagelen=100 (max) or limit if smaller to optimize API calls
+        let page_len = limit.map(|l| std::cmp::min(l, 100)).unwrap_or(100);
+        let mut path = format!("/repositories/{}?pagelen={}", workspace, page_len);
+
+        loop {
+            let response: crate::api::models::PaginatedResponse<crate::api::models::Repository> =
+                self.get(&path).await?;
+
+            all_repos.extend(response.values);
+
+            // Check if we've reached the limit
+            let limit_reached = limit.is_some_and(|max| all_repos.len() >= max as usize);
+
+            if limit_reached {
+                all_repos.truncate(limit.unwrap() as usize);
+                break;
+            }
+
+            match response.next {
+                Some(next_url) => path = next_url,
+                None => break,
+            }
+        }
+
+        Ok(all_repos)
     }
 
     /// Get a single pull request by ID
