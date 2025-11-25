@@ -6,30 +6,15 @@ use crate::display::ui;
 pub fn interactive_init() -> Result<()> {
     ui::info("Initializing config...");
     // Interactive setup
-    let mut input = String::new();
 
-    print!("Initialize configuration in current directory? (y/n) [n]: ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut input)?;
-    let local_init = input.trim().to_lowercase() == "y";
+    let input = prompt("Initialize configuration in current directory? (y/n) [n]: ")?;
+    let local_init = input.to_lowercase() == "y";
 
-    input.clear();
-    print!("Workspace (e.g., myworkspace): ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut input)?;
-    let workspace = input.trim().to_string();
+    let workspace = prompt("Workspace (e.g., myworkspace): ")?;
 
-    input.clear();
-    print!("Default repository (optional): ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut input)?;
-    let repo = input.trim().to_string();
+    let repo = prompt("Default repository (optional): ")?;
 
-    input.clear();
-    print!("Default remote [origin]: ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut input)?;
-    let input_remote = input.trim().to_string();
+    let input_remote = prompt("Default remote [origin]: ")?;
     let remote = if input_remote.is_empty() {
         "origin".to_string()
     } else {
@@ -47,11 +32,7 @@ pub fn interactive_init() -> Result<()> {
             target_dir
         ));
     } else {
-        input.clear();
-        print!("Default user email (optional): ");
-        io::stdout().flush()?;
-        io::stdin().read_line(&mut input)?;
-        let user = input.trim().to_string();
+        let user = prompt("Default user email (optional): ")?;
 
         let profile_name = if user.is_empty() {
             "default".to_string()
@@ -91,4 +72,12 @@ pub fn interactive_init() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn prompt(message: &str) -> Result<String> {
+    print!("{}", message);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
 }
