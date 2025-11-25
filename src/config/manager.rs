@@ -1,29 +1,27 @@
 use anyhow::{Context, Result};
 use config::{Config, FileFormat};
 use dirs;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct ProfileConfig {
-    pub default_profile: Option<String>,
+    pub user: Option<String>,
     #[serde(rename = "profile")]
     pub profiles: Option<std::collections::HashMap<String, Profile>>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Profile {
     pub workspace: Option<String>,
     pub user: Option<String>,
-    pub api_url: Option<String>,
-    pub output_format: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LocalProjectConfig {
     pub project: Option<ProjectContext>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ProjectContext {
     pub workspace: Option<String>,
     pub repository: Option<String>,
@@ -72,7 +70,7 @@ impl ProfileConfig {
     }
 
     pub fn get_active_profile(&self) -> Option<&Profile> {
-        let profile_name = self.default_profile.as_deref().unwrap_or("default");
+        let profile_name = self.user.as_deref().unwrap_or("default");
         self.profiles.as_ref().and_then(|p| p.get(profile_name))
     }
 
@@ -85,7 +83,7 @@ impl ProfileConfig {
         profile_override: Option<&str>,
     ) -> Result<crate::api::client::BitbucketClient> {
         let profile_name = profile_override
-            .or(self.default_profile.as_deref())
+            .or(self.user.as_deref())
             .unwrap_or("default");
 
         let profile = self.profiles.as_ref().and_then(|p| p.get(profile_name));
@@ -96,9 +94,7 @@ impl ProfileConfig {
             crate::utils::debug::log(&format!("Profile '{}' NOT found in config.", profile_name));
         }
 
-        let base_url = profile
-            .and_then(|p| p.api_url.clone())
-            .unwrap_or_else(|| crate::constants::DEFAULT_API_URL.to_string());
+        let base_url = crate::constants::DEFAULT_API_URL.to_string();
 
         let mut auth = None;
         if let Some(username) = profile.and_then(|p| p.user.as_ref()) {
@@ -251,13 +247,11 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: Some("default_user".to_string()),
-                api_url: None,
-                output_format: None,
             },
         );
 
         let config = ProfileConfig {
-            default_profile: None,
+            user: None,
             profiles: Some(profiles),
         };
 
@@ -275,13 +269,11 @@ mod tests {
             Profile {
                 workspace: Some("custom_ws".to_string()),
                 user: Some("custom_user".to_string()),
-                api_url: None,
-                output_format: None,
             },
         );
 
         let config = ProfileConfig {
-            default_profile: Some("custom".to_string()),
+            user: Some("custom".to_string()),
             profiles: Some(profiles),
         };
 
@@ -298,13 +290,11 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: Some("test_user".to_string()),
-                api_url: None,
-                output_format: None,
             },
         );
 
         let config = ProfileConfig {
-            default_profile: None,
+            user: None,
             profiles: Some(profiles),
         };
 
@@ -320,13 +310,11 @@ mod tests {
             Profile {
                 workspace: Some("ws".to_string()),
                 user: None,
-                api_url: None,
-                output_format: None,
             },
         );
 
         let config = ProfileConfig {
-            default_profile: None,
+            user: None,
             profiles: Some(profiles),
         };
 

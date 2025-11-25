@@ -31,6 +31,7 @@ async fn main() {
         Commands::Pr(args) => commands::pr::handle(&ctx, args).await,
         Commands::Auth(args) => commands::auth::handle(&ctx, args).await,
         Commands::Config(args) => commands::config::handle(&ctx, args).await,
+        Commands::Repo(args) => commands::repo::handle(&ctx, args).await,
     };
 
     if let Err(e) = result {
