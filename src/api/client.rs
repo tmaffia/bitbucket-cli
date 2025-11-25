@@ -108,9 +108,11 @@ impl BitbucketClient {
         limit: Option<u32>,
     ) -> Result<Vec<crate::api::models::PullRequest>> {
         let mut all_prs = Vec::new();
+        // Use pagelen=100 (max) or limit if smaller to optimize API calls
+        let page_len = limit.map(|l| std::cmp::min(l, 100)).unwrap_or(100);
         let mut path = format!(
-            "/repositories/{}/{}/pullrequests?state={}",
-            workspace, repo, state
+            "/repositories/{}/{}/pullrequests?state={}&pagelen={}",
+            workspace, repo, state, page_len
         );
 
         loop {
@@ -148,7 +150,9 @@ impl BitbucketClient {
         limit: Option<u32>,
     ) -> Result<Vec<crate::api::models::Repository>> {
         let mut all_repos = Vec::new();
-        let mut path = format!("/repositories/{}", workspace);
+        // Use pagelen=100 (max) or limit if smaller to optimize API calls
+        let page_len = limit.map(|l| std::cmp::min(l, 100)).unwrap_or(100);
+        let mut path = format!("/repositories/{}?pagelen={}", workspace, page_len);
 
         loop {
             let response: crate::api::models::PaginatedResponse<crate::api::models::Repository> =

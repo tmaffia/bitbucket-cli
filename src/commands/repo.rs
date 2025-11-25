@@ -17,8 +17,8 @@ pub enum RepoCommands {
         #[arg(long, short)]
         workspace: Option<String>,
 
-        /// Limit the number of repositories to return
-        #[arg(long, default_value = "50")]
+        /// Limit the number of repositories to return (default: 100)
+        #[arg(long, default_value = "100")]
         limit: u32,
     },
 }
@@ -26,10 +26,8 @@ pub enum RepoCommands {
 pub async fn handle(ctx: &AppContext, args: RepoArgs) -> Result<()> {
     match args.command {
         RepoCommands::List { workspace, limit } => {
-            let config = crate::config::manager::ProfileConfig::load_global()?;
             let ws = workspace
                 .or_else(|| ctx.workspace.clone())
-                .or_else(|| config.get_active_profile().and_then(|p| p.workspace.clone()))
                 .context("No workspace configured. Please set a default workspace with 'bb config set workspace <NAME>' or provide --workspace")?;
 
             let client = ctx.client.clone(); // Use client from context which is already initialized with auth

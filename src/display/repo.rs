@@ -8,28 +8,32 @@ pub fn print_repo_list(repos: &[Repository]) {
         return;
     }
 
-    let headers = vec!["Name", "Full Name", "Language", "Updated", "Private"];
+    let headers = vec!["Name", "Updated", "Visibility"];
     let rows: Vec<Vec<Cell>> = repos
         .iter()
         .map(|r| {
+            let is_private = r.is_private.unwrap_or(false);
             vec![
                 Cell::new(&r.name).add_attribute(Attribute::Bold),
-                Cell::new(&r.full_name),
-                Cell::new(r.language.as_deref().unwrap_or("-")),
                 Cell::new(r.updated_on.as_deref().unwrap_or("-")),
-                Cell::new(if r.is_private.unwrap_or(false) {
-                    "Yes"
-                } else {
-                    "No"
-                })
-                .fg(if r.is_private.unwrap_or(false) {
+                Cell::new(if is_private { "Private" } else { "Public" }).fg(if is_private {
                     Color::Yellow
                 } else {
-                    Color::Green
+                    Color::Cyan
                 }),
             ]
         })
         .collect();
 
-    formatting::print_table(headers, rows);
+    let table = formatting::format_table(headers, rows);
+
+    if crate::display::ui::should_use_pager() {
+        let content = format!("Found {} repositories:\n{}", repos.len(), table);
+        if let Err(e) = crate::display::ui::display_in_pager(&content) {
+            crate::display::ui::error(&format!("Failed to display in pager: {}", e));
+        }
+    } else {
+        crate::display::ui::info(&format!("Found {} repositories:", repos.len()));
+        println!("{}", table);
+    }
 }

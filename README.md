@@ -76,6 +76,9 @@ List repositories in your workspace:
 
 ```bash
 bb repo list
+
+# List with a custom limit (default is 100)
+bb repo list --limit 20
 ```
 
 ### Configuration
