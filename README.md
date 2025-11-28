@@ -1,4 +1,4 @@
-# bbcli v0.3.7
+# bbcli v0.3.8
 
 Bitbucket CLI is a command line interface for interacting with Bitbucket.
 
@@ -79,6 +79,84 @@ bb repo list
 
 # List with a custom limit (default is 100)
 bb repo list --limit 20
+```
+
+### Pull Requests
+
+List pull requests:
+
+```bash
+bb pr list
+```
+
+View a pull request (auto-detected from branch or by ID):
+
+```bash
+bb pr view
+bb pr view 123
+```
+
+**View Diff with Filtering:**
+
+You can filter the diff by file patterns or size.
+
+**Inferred Context (Current Branch):**
+
+```bash
+# Filter by file extension
+bb pr diff "*.rs"
+
+# Filter by directory
+bb pr diff src/commands/
+```
+
+**Manual Context (Explicit ID):**
+
+```bash
+# Filter by specific file for PR #123
+bb pr diff 123 src/main.rs
+
+# Skip large files for PR #123
+bb pr diff 123 --max-diff-size 100
+```
+
+**Review a Pull Request:**
+
+Start an interactive review or submit immediately with flags.
+
+**Inferred Context (Current Branch):**
+
+```bash
+# Interactive mode
+bb pr review
+
+# Approve immediately
+bb pr review --approve
+```
+
+**Manual Context (Explicit ID):**
+
+```bash
+# Interactive mode for PR #123
+bb pr review 123
+
+# Request changes for PR #123
+bb pr review 123 --request-changes
+
+# Comment on PR #123
+bb pr review 123 --comment --body "Great work!"
+```
+
+**Override Repository:**
+
+You can run any command against a specific repository using `-R`:
+
+```bash
+# List PRs in a different repo
+bb pr list -R my-workspace/other-repo
+
+# View PR #123 in a different repo
+bb pr view 123 -R my-workspace/other-repo
 ```
 
 ### Configuration

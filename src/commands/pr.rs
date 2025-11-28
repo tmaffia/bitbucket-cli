@@ -36,14 +36,18 @@ pub enum PrCommands {
     },
     /// Show diff
     Diff {
-        /// PR ID (optional, infers from branch if missing)
-        id: Option<u32>,
+        /// PR ID (optional, infers from branch if missing) or file patterns
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
         /// Display only names of changed files
         #[arg(long)]
         name_only: bool,
         /// Open the pull request diff in the browser
         #[arg(long, short = 'w')]
         web: bool,
+        /// Skip files larger than this number of lines
+        #[arg(long)]
+        max_diff_size: Option<usize>,
     },
     /// Show comments
     Comments {
@@ -156,7 +160,12 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
                 pr_display::print_comments(&comments_list);
             }
         }
-        PrCommands::Diff { id, name_only, web } => {
+        PrCommands::Diff {
+            args,
+            name_only,
+            web,
+            max_diff_size,
+        } => {
             let workspace = ctx
                 .workspace
                 .as_ref()
@@ -166,7 +175,8 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("No repository found"))?;
 
-            let pr_id = resolve_pr_id(id, &ctx.client, workspace, repo).await?;
+            let (id_opt, patterns) = parse_args_with_id(&args);
+            let pr_id = resolve_pr_id(id_opt, &ctx.client, workspace, repo).await?;
 
             // Handle --web flag (open in browser)
             if web {
@@ -184,12 +194,9 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
 
             // Handle --name-only flag
             if name_only {
-                crate::display::diff::print_filenames_only(&diff);
+                crate::display::diff::print_filenames_only(&diff, patterns);
             } else {
-                // TODO: Add support for filtering (--exclude, --exclude-lockfiles, path patterns)
-                // TODO: Add support for collapsing large diffs (--collapse-large)
-                // TODO: Add --stat flag for git-style statistics
-                crate::display::diff::print_diff(&diff)?;
+                crate::display::diff::print_diff(&diff, patterns, max_diff_size)?;
             }
         }
         PrCommands::Comments { id } => {
@@ -254,6 +261,27 @@ async fn resolve_pr_id(
     }
 }
 
+/// Parse arguments to separate an optional ID from the rest of the arguments.
+///
+/// # Arguments
+///
+/// * `args` - Slice of string arguments
+///
+/// # Returns
+///
+/// A tuple containing:
+/// * `Option<u32>` - The parsed ID, if the first argument was a valid number
+/// * `&[String]` - The remaining arguments (all arguments if no ID was found, or the rest if an ID was found)
+fn parse_args_with_id(args: &[String]) -> (Option<u32>, &[String]) {
+    if let Some(first) = args.first()
+        && let Ok(id) = first.parse::<u32>()
+    {
+        (Some(id), &args[1..])
+    } else {
+        (None, args)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,5 +311,32 @@ mod tests {
         let ctx = create_test_context(Some("ws".to_string()), Some("repo".to_string()));
         assert_eq!(ctx.workspace.as_deref(), Some("ws"));
         assert_eq!(ctx.repo.as_deref(), Some("repo"));
+    }
+
+    #[test]
+    fn test_parse_args_with_id() {
+        // Case 1: ID and patterns
+        let args = vec!["123".to_string(), "src/".to_string()];
+        let (id, patterns) = parse_args_with_id(&args);
+        assert_eq!(id, Some(123));
+        assert_eq!(patterns, &["src/".to_string()]);
+
+        // Case 2: Only ID
+        let args = vec!["456".to_string()];
+        let (id, patterns) = parse_args_with_id(&args);
+        assert_eq!(id, Some(456));
+        assert!(patterns.is_empty());
+
+        // Case 3: Only patterns (no ID)
+        let args = vec!["src/".to_string(), "*.rs".to_string()];
+        let (id, patterns) = parse_args_with_id(&args);
+        assert_eq!(id, None);
+        assert_eq!(patterns, &["src/".to_string(), "*.rs".to_string()]);
+
+        // Case 4: Empty
+        let args: Vec<String> = vec![];
+        let (id, patterns) = parse_args_with_id(&args);
+        assert_eq!(id, None);
+        assert!(patterns.is_empty());
     }
 }
