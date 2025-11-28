@@ -1,6 +1,8 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
+pub mod review;
+
 use crate::display::{pr as pr_display, ui};
 
 #[derive(Args)]
@@ -48,6 +50,8 @@ pub enum PrCommands {
         /// PR ID (optional, infers from branch if missing)
         id: Option<u32>,
     },
+    /// Review a pull request
+    Review(review::ReviewArgs),
 }
 
 use crate::api::client::BitbucketClient;
@@ -215,6 +219,9 @@ pub async fn handle(ctx: &AppContext, args: PrArgs) -> Result<()> {
             } else {
                 pr_display::print_comments(&comments);
             }
+        }
+        PrCommands::Review(args) => {
+            review::pr_review(ctx, &args).await?;
         }
     }
     Ok(())

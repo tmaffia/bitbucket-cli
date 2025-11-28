@@ -58,17 +58,9 @@ impl BitbucketClient {
         request
     }
 
-    /// Perform a GET request to the Bitbucket API
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The API path (relative to base URL) or full URL
-    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
-        let response = self
-            .build_request(Method::GET, path)
-            .send()
-            .await
-            .context("Failed to send request")?;
+    /// Send a request and handle common error checking
+    async fn send_request(&self, request: RequestBuilder) -> Result<reqwest::Response> {
+        let response = request.send().await.context("Failed to send request")?;
 
         crate::utils::debug::log(&format!("Response status: {}", response.status()));
 
@@ -84,6 +76,18 @@ impl BitbucketClient {
                 error_text
             ));
         }
+
+        Ok(response)
+    }
+
+    /// Perform a GET request to the Bitbucket API
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The API path (relative to base URL) or full URL
+    pub async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
+        let request = self.build_request(Method::GET, path);
+        let response = self.send_request(request).await?;
 
         let data = response
             .json::<T>()
@@ -211,24 +215,8 @@ impl BitbucketClient {
             "/repositories/{}/{}/pullrequests/{}/diff",
             workspace, repo, id
         );
-        let response = self
-            .build_request(Method::GET, &path)
-            .send()
-            .await
-            .context("Failed to send request")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Could not read error body".to_string());
-            return Err(anyhow::anyhow!(
-                "API request failed ({}) : {}",
-                status,
-                error_text
-            ));
-        }
+        let request = self.build_request(Method::GET, &path);
+        let response = self.send_request(request).await?;
 
         let text = response.text().await.context("Failed to get diff text")?;
         Ok(text)
@@ -316,6 +304,78 @@ impl BitbucketClient {
             self.get(url.as_str()).await?;
 
         Ok(response.values.into_iter().next())
+    }
+
+    /// Approve a pull request
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
+    pub async fn approve_pr(&self, workspace: &str, repo: &str, id: u32) -> Result<()> {
+        let path = format!(
+            "/repositories/{}/{}/pullrequests/{}/approve",
+            workspace, repo, id
+        );
+        let request = self.build_request(Method::POST, &path);
+        self.send_request(request).await?;
+
+        Ok(())
+    }
+
+    /// Request changes on a pull request
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
+    pub async fn request_changes(&self, workspace: &str, repo: &str, id: u32) -> Result<()> {
+        let path = format!(
+            "/repositories/{}/{}/pullrequests/{}/request-changes",
+            workspace, repo, id
+        );
+        let request = self.build_request(Method::POST, &path);
+        self.send_request(request).await?;
+
+        Ok(())
+    }
+
+    /// Post a comment on a pull request
+    ///
+    /// # Arguments
+    ///
+    /// * `workspace` - The workspace ID or slug
+    /// * `repo` - The repository slug
+    /// * `id` - The pull request ID
+    /// * `content` - The comment content
+    pub async fn post_pr_comment(
+        &self,
+        workspace: &str,
+        repo: &str,
+        id: u32,
+        content: &str,
+    ) -> Result<crate::api::models::Comment> {
+        let path = format!(
+            "/repositories/{}/{}/pullrequests/{}/comments",
+            workspace, repo, id
+        );
+
+        let body = serde_json::json!({
+            "content": {
+                "raw": content
+            }
+        });
+
+        let request = self.build_request(Method::POST, &path).json(&body);
+        let response = self.send_request(request).await?;
+
+        let comment = response
+            .json::<crate::api::models::Comment>()
+            .await
+            .context("Failed to parse JSON response")?;
+        Ok(comment)
     }
 
     /// Get the currently authenticated user

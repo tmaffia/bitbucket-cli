@@ -1,6 +1,6 @@
 [package]
 name = "bb-cli"
-version = "0.3.6"
+version = "0.3.7"
 edition = "2024"
 
 [dependencies]
@@ -18,6 +18,7 @@ serde_json = "1.0.140"
 tokio = { version = "1.48.0", features = ["full"] }
 toml_edit = "0.23.7"
 similar = { version = "2.7", features = ["inline"] }
+dialoguer = "0.12.0"
 
 [[bin]]
 name = "bb"
