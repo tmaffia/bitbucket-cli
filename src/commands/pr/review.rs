@@ -5,10 +5,10 @@ use dialoguer::{Input, Select};
 
 #[derive(Args, Debug)]
 pub struct ReviewArgs {
-    /// The ID of the pull request to review
+    /// The ID of the pull request to review (optional, infers from branch if missing)
     pub id: Option<u32>,
 
-    /// Approve the pull request
+    /// Approve the pull request immediately
     #[arg(short, long)]
     pub approve: bool,
 
@@ -20,7 +20,7 @@ pub struct ReviewArgs {
     #[arg(short, long)]
     pub comment: bool,
 
-    /// The body of the review or comment
+    /// The body of the review or comment (required for --comment)
     #[arg(short, long)]
     pub body: Option<String>,
 }
